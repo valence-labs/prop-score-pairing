@@ -9,7 +9,7 @@ from .base import BaseClassifier
 class BallsClassifier(BaseClassifier):
     def __init__(self, 
                 latent_dim: int = 32,
-                rnlr: float = 0.0005,
+                rnlr: float = 0.0001,
                 rnmomentum: float = 0.9,
                 rnwd: float = 0.0001,
                 **kwargs):
@@ -39,12 +39,32 @@ class BallsClassifier(BaseClassifier):
                           {'params':self.logits_1.parameters()},
                           {'params':self.logits_2.parameters()}], 
                           lr = self.lr, weight_decay = self.wd, momentum = self.momentum)
-        print(self.trainer.max_epochs)
-        print(self.rnlr, self.lr)
-        scheduler = optim.lr_scheduler.OneCycleLR(optimizer, max_lr = [self.rnlr, self.rnlr, self.lr, self.lr, self.lr, self.lr], total_steps = self.trainer.max_epochs, pct_start = 0.2)
+        scheduler = optim.lr_scheduler.OneCycleLR(optimizer, max_lr = [self.rnlr, self.rnlr, self.lr, self.lr, self.lr, self.lr], total_steps = self.trainer.max_epochs, pct_start = 0.1)
         return [optimizer], [{"scheduler": scheduler, "interval": "epoch"}]
     
     def training_step(self, batch, batch_idx):
         x1, x2, y, z = batch
         loss_dict = super().training_step(batch = (x1, x2, y), batch_idx = batch_idx)
         return loss_dict
+
+class GEXADT_Classifier(BaseClassifier):
+    def __init__(self, 
+                **kwargs):
+        super().__init__(**kwargs)
+        ### implement clf1 as adt classifier
+        ### implement clf2 as gex classifier
+        self.clf1 = torch.nn.Sequential(
+            torch.nn.LazyLinear(out_features=256),
+            torch.nn.ReLU(),
+            torch.nn.LazyLinear(out_features=256),
+            torch.nn.ReLU(),
+            torch.nn.LazyLinear(out_features=45)
+        )
+        self.clf2 = torch.nn.Sequential(
+            torch.nn.LazyLinear(out_features=256),
+            torch.nn.ReLU(),
+            torch.nn.LazyLinear(out_features=256),
+            torch.nn.ReLU(),
+            torch.nn.LazyLinear(out_features=45)
+        )
+

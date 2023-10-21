@@ -7,7 +7,7 @@ import ot
 from typing import Optional
 from sklearn.neighbors import NearestNeighbors
 import sys
-sys.path.insert(1, "/mnt/ps/home/CORP/johnny.xi/sandbox/matching/SCOT/src")
+sys.path.insert(1, "/mnt/ps/home/CORP/johnny.xi/sandbox/matching/scot/src")
 from scotv1 import *
 
 def read_from_pickle(path):
@@ -80,19 +80,24 @@ def snn_matching(x: np.ndarray, y: np.ndarray, k: Optional[int] = 1):
     
     return matching_matrix.toarray()
 
-def eot_matching(x: np.ndarray, y: np.ndarray, max_iter = 1000, verbose: bool = True):
-
+def eot_matching(x: np.ndarray, y: np.ndarray, max_iter = 1000, verbose: bool = True, use_sinkhorn_log = False):
+    if use_sinkhorn_log: 
+        method = "sinkhorn_log" 
+        reg = 0.01
+    else: 
+        method = "sinkhorn"
+        reg = 0.05
     p = ot.unif(x.shape[0])
     q = ot.unif(y.shape[0])
     M = ot.dist(x, y,  metric = "euclidean")
-    coupling, log= ot.sinkhorn(p, q, M, reg = 0.001, numItermax=max_iter, stopThr=1e-9, method = "sinkhorn_log", log=True, verbose=verbose)
+    coupling, log= ot.sinkhorn(p, q, M, reg = reg, numItermax=max_iter, stopThr=1e-9, method = method, log=True, verbose=verbose)
     coupling = coupling/coupling.sum(axis = 1, keepdims = True)
 
     return coupling
 
 def scot_matching(x: np.ndarray, y: np.ndarray):
     scot = SCOT(x, y)
-    _, _ = scot.align()
+    _ = scot.align()
     coupling = scot.coupling
     weights=np.sum(coupling, axis = 1)
     coupling = coupling / weights[:, None]

@@ -7,7 +7,7 @@ class ImageEncoder(torch.nn.Module):
         super(ImageEncoder, self).__init__()        
         
         self.latent_dim = latent_dim
-        self.width = latent_dim * 2
+        self.width = min(latent_dim * 4, 256)
         
         self.base_model = resnet18(pretrained=True)        
         self.feat_layers= list(self.base_model.children())[:-1]
@@ -25,3 +25,6 @@ class ImageEncoder(torch.nn.Module):
         x= x.view(x.shape[0], x.shape[1])
         x= self.fc_net(x)
         return x
+    
+
+

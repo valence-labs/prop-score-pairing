@@ -6,9 +6,9 @@ from .. import compute_class_weights, convert_to_labels
 
 class BaseClassifier(LightningModule):
     def __init__(self, 
-                 lr: float = 0.01, 
+                 lr: float = 0.0005, 
                  wd: float = 0.0001,
-                 momentum: float = 0.0):
+                 momentum: float = 0.9):
         super().__init__()
 
         self.lr = lr
@@ -59,7 +59,7 @@ class BaseClassifier(LightningModule):
 
     def setup(self, stage:str):
         ## placeholders to compute matching metrics on the fly
-        labels = convert_to_labels(self.trainer.datamodule.y_tr) # type: ignore[attr-defined]
+        labels = self.trainer.datamodule.labels # type: ignore[attr-defined]
         num_classes, class_weights = compute_class_weights(labels)
         self.train_match_x1 = {label:np.empty((0, num_classes)) for label in np.unique(labels)}
         self.train_match_x2 = {label:np.empty((0, num_classes)) for label in np.unique(labels)}

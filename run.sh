@@ -7,6 +7,8 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --time=20:00:00
 #SBATCH --mem-per-gpu=100G
+#SBATCH --output=/results/slurm-%A.out
+
 
 eval "$(pyenv init -)"
 eval "$(pyenv virtualenv-init -)"

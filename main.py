@@ -23,8 +23,8 @@ if __name__ == "__main__":
         model = BallsClassifier(latent_dim = 128, lr = args.lr)
         data = BallsDataModule(batch_size = args.batch_size)
     if args.dataset == "GEXADT":
-        model = GEXADT_Classifier(n_classes = 43, lr = args.lr)
-        data = GEXADTDataModule(batch_size = args.batch_size, d1_sub = True)
+        model = GEXADT_Classifier(n_classes = 45, lr = args.lr)
+        data = GEXADTDataModule(batch_size = args.batch_size)
 
 
     trainer = Trainer(accelerator = "gpu", 

@@ -6,7 +6,7 @@ from matching.callbacks import MatchingMetrics
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description = "Matching on balls or ADT/GEX")
-    parser.add_argument("--max_epochs", metavar = "MAX_EPOCHS", type = int, default = 100)
+    parser.add_argument("--max_epochs", metavar = "MAX_EPOCHS", type = int, default = 50)
     parser.add_argument("--batch_size", metavar = "BATCH_SIZE", type = int, default = 256)
     parser.add_argument("--lr", metavar = "LEARNING_RATE", type = float, default = 0.001)
     parser.add_argument("--dataset", metavar = "BALLS OR GEXADT", type = str, default = "GEXADT")
@@ -23,8 +23,8 @@ if __name__ == "__main__":
         model = BallsClassifier(latent_dim = 128, lr = args.lr)
         data = BallsDataModule(batch_size = args.batch_size)
     if args.dataset == "GEXADT":
-        model = GEXADT_Classifier(lr = args.lr)
-        data = GEXADTDataModule(batch_size = args.batch_size)
+        model = GEXADT_Classifier(n_classes = 43, lr = args.lr)
+        data = GEXADTDataModule(batch_size = args.batch_size, d1_sub = True)
 
 
     trainer = Trainer(accelerator = "gpu", 

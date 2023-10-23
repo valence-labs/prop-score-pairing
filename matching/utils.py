@@ -9,6 +9,7 @@ from sklearn.neighbors import NearestNeighbors
 import sys
 sys.path.insert(1, "/mnt/ps/home/CORP/johnny.xi/sandbox/matching/scot/src")
 from scotv1 import *
+from evals import *
 
 def read_from_pickle(path):
     with open(path, 'rb') as file:
@@ -124,3 +125,6 @@ def convert_to_labels(y: np.ndarray) -> np.ndarray:
     y = np.asarray([lookup[key] for key in y_tuple]) ## (20000,)
 
     return y
+
+def compute_avg_FOSCTTM(x: np.ndarray, y: np.ndarray) -> float:
+    return np.array(calc_domainAveraged_FOSCTTM(x, y)).mean()

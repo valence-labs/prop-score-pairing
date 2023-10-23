@@ -49,6 +49,7 @@ class BallsClassifier(BaseClassifier):
 
 class GEXADT_Classifier(BaseClassifier):
     def __init__(self, 
+                 n_classes: int = 45,
                 **kwargs):
         super().__init__(**kwargs)
         ### implement clf1 as adt classifier
@@ -58,13 +59,13 @@ class GEXADT_Classifier(BaseClassifier):
             torch.nn.ReLU(),
             torch.nn.LazyLinear(out_features=256),
             torch.nn.ReLU(),
-            torch.nn.LazyLinear(out_features=45)
+            torch.nn.LazyLinear(out_features=n_classes)
         )
         self.clf2 = torch.nn.Sequential(
             torch.nn.LazyLinear(out_features=256),
             torch.nn.ReLU(),
             torch.nn.LazyLinear(out_features=256),
             torch.nn.ReLU(),
-            torch.nn.LazyLinear(out_features=45)
+            torch.nn.LazyLinear(out_features=n_classes)
         )
 

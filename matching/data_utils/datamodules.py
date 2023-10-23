@@ -116,25 +116,39 @@ class BallsDataModule(LightningDataModule):
 class GEXADTDataModule(LightningDataModule):
     def __init__(self,
         batch_size: int,
-    ) -> None:
+        d1_sub: bool = False
+        ) -> None:
         super().__init__()
         self.batch_size = batch_size
+        self.d1_sub = d1_sub ## subset to donor 1?
 
     def _train_val_split_df(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         if "split" not in df.columns:
             raise KeyError(f"Missing column 'split' from dataframe, got: {df.columns}")
         train_idx = df["split"] == "train"
-        val_idx = (df["split"] == "val")
-        test_idx = (df["split"] == "test") 
-        train_df = df[train_idx].reset_index()
-        val_df = df[val_idx].reset_index()
-        test_df = df[test_idx].reset_index()
-
+        val_idx = df["split"] == "val"
+        test_idx = df["split"] == "test" 
+        if min(np.sum(train_idx), np.sum(val_idx), np.sum(test_idx)) > 0.01*len(train_idx): ## If each split is at least 1% of full data
+            train_df = df[train_idx].reset_index()
+            val_df = df[val_idx].reset_index()
+            test_df = df[test_idx].reset_index()
+        else:
+            df = df.reset_index()
+            train_df = df[:round(len(df)*0.8)].reset_index()
+            val_df = df[round(len(df)*0.8):round(len(df)*0.9)].reset_index()
+            test_df = df[:round(len(df)*0.9)].reset_index()
         return train_df, val_df, test_df
 
     def load_data(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
         data_adt = pd.read_parquet("/mnt/ps/home/CORP/johnny.xi/sandbox/matching/data/datasets/neurips_2021_bm/adt.parquet") ## gonna want to have two of these
         data_gex = pd.read_parquet("/mnt/ps/home/CORP/johnny.xi/sandbox/matching/data/datasets/neurips_2021_bm/gex_pca_200.parquet") ## gonna want to have two of these
+        if self.d1_sub:
+            d1 = ["s1d1", "s1d2", "s1d3"]
+            data_adt = data_adt.loc[data_adt.batch.isin(d1)]
+            data_gex = data_gex.loc[data_gex.batch.isin(d1)]
+            ## reset codes
+            data_adt.CT_id = data_adt.cell_type.cat.remove_unused_categories().cat.codes
+            data_gex.CT_id = data_gex.cell_type.cat.remove_unused_categories().cat.codes
 
         return self._train_val_split_df(data_adt), self._train_val_split_df(data_gex)
 

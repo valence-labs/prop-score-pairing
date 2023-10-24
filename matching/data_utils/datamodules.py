@@ -78,7 +78,6 @@ class BallsDataset(Dataset):
         x1, x2 = self.transform(x1), self.transform(x2)
 
         return x1, x2, y, z
-
 class BallsDataModule(LightningDataModule):
     def __init__(self,batch_size):
         super().__init__()
@@ -112,6 +111,10 @@ class BallsDataModule(LightningDataModule):
         return DataLoader(BallsDataset(self.x1_val, self.x2_val, self.y_val, self.z_val), batch_size = self.batch_size, num_workers=8)
     def test_dataloader(self):
         return DataLoader(BallsDataset(self.x1_test, self.x2_test, self.y_test, self.z_test), batch_size = self.batch_size, num_workers=8)
+
+class NoisyBallsDataModule(BallsDataModule):
+    def prepare_data(self):
+        self.data_dir = "/mnt/ps/home/CORP/johnny.xi/sandbox/matching/data/datasets/noisyballs_scm_non_linear/intervention/"
 
 class GEXADTDataModule(LightningDataModule):
     def __init__(self,

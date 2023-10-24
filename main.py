@@ -1,7 +1,7 @@
 from pytorch_lightning import loggers, Trainer
 import argparse
 from matching.models.classifier import BallsClassifier, GEXADT_Classifier
-from matching.data_utils.datamodules import BallsDataModule, GEXADTDataModule
+from matching.data_utils.datamodules import NoisyBallsDataModule, GEXADTDataModule
 from matching.callbacks import MatchingMetrics
 
 def parse_arguments():
@@ -21,7 +21,7 @@ if __name__ == "__main__":
 
     if args.dataset == "BALLS":
         model = BallsClassifier(latent_dim = 128, lr = args.lr)
-        data = BallsDataModule(batch_size = args.batch_size)
+        data = NoisyBallsDataModule(batch_size = args.batch_size)
     if args.dataset == "GEXADT":
         model = GEXADT_Classifier(n_classes = 45, lr = args.lr)
         data = GEXADTDataModule(batch_size = args.batch_size)
@@ -33,7 +33,7 @@ if __name__ == "__main__":
                     devices = 1,
                     log_every_n_steps = 1,
                     num_sanity_val_steps=2,
-                    callbacks = [MatchingMetrics(run_scot=True)], 
+                    callbacks = [MatchingMetrics(run_scot=False)], 
                     logger = wandb_logger,
                     )
     

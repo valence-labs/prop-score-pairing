@@ -32,8 +32,8 @@ class BallsClassifier(BaseClassifier):
         self.clf2 = torch.nn.Sequential(self.Encoder_1, self.logits_1)
 
     def configure_optimizers(self):
-        optimizer = optim.SGD([{'params':self.Encoder_1.base_model.parameters(), 'lr':self.rnlr, 'momentum': self.rnmomentum, 'weight_decay':self.rnwd}, 
-                          {'params':self.Encoder_2.base_model.parameters(), 'lr':self.rnlr, 'momentum':self.rnmomentum, 'weight_decay':self.rnwd},
+        optimizer = optim.SGD([{'params':self.Encoder_1.feat_net.parameters(), 'lr':self.rnlr, 'momentum': self.rnmomentum, 'weight_decay':self.rnwd}, 
+                          {'params':self.Encoder_2.feat_net.parameters(), 'lr':self.rnlr, 'momentum':self.rnmomentum, 'weight_decay':self.rnwd},
                           {'params':self.Encoder_1.fc_net.parameters()},
                           {'params':self.Encoder_2.fc_net.parameters()},
                           {'params':self.logits_1.parameters()},

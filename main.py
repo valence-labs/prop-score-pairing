@@ -10,7 +10,7 @@ def parse_arguments():
     parser.add_argument("--batch_size", metavar = "BATCH_SIZE", type = int, default = 256)
     parser.add_argument("--lr", metavar = "LEARNING_RATE", type = float, default = 0.0005)
     parser.add_argument("--dataset", metavar = "BALLS OR GEXADT", type = str, default = "GEXADT")
-    parser.add_argument("--eval_interval", metavar = "INTERVAL OF MATCHING METRICS", type = int, default = 5)
+    parser.add_argument("--eval_interval", metavar = "INTERVAL OF MATCHING METRICS", type = int, default = 10)
     return parser.parse_args()
 
 if __name__ == "__main__":

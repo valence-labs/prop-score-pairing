@@ -7,35 +7,35 @@ class ImageEncoder(torch.nn.Module):
         super(ImageEncoder, self).__init__()        
         
         self.latent_dim = latent_dim
-        self.width = min(latent_dim * 4, 256)
+        # self.width = min(latent_dim * 4, 256)
         
-        self.base_model = resnet18(pretrained=True)        
-        self.feat_layers= list(self.base_model.children())[:-1]
-        self.feat_net= nn.Sequential(*self.feat_layers)
+        # self.base_model = resnet18(pretrained=True)        
+        # self.feat_layers= list(self.base_model.children())[:-1]
+        # self.feat_net= nn.Sequential(*self.feat_layers)
 
-        self.fc_layers= [                    
-                    nn.Linear(512, self.width),
-                    nn.LeakyReLU(),
-                    nn.Linear(self.width, self.latent_dim),
-                ] 
-        self.fc_net = nn.Sequential(*self.fc_layers)
+        # self.fc_layers= [                    
+        #             nn.Linear(512, self.width),
+        #             nn.LeakyReLU(),
+        #             nn.Linear(self.width, self.latent_dim),
+        #         ] 
+        # self.fc_net = nn.Sequential(*self.fc_layers)
 
-        # modules = []
-        # hidden_dims = [32, 64, 128, 256, 512]
-        # in_channels = 3
-        # # Build Encoder
-        # for h_dim in hidden_dims:
-        #     modules.append(
-        #         nn.Sequential(
-        #             nn.Conv2d(in_channels, out_channels=h_dim,
-        #                       kernel_size= 3, stride= 2, padding  = 1),
-        #             nn.BatchNorm2d(h_dim),
-        #             nn.LeakyReLU())
-        #     )
-        #     in_channels = h_dim
+        modules = []
+        hidden_dims = [32, 64, 128, 256, 512]
+        in_channels = 3
+        # Build Encoder
+        for h_dim in hidden_dims:
+            modules.append(
+                nn.Sequential(
+                    nn.Conv2d(in_channels, out_channels=h_dim,
+                              kernel_size= 3, stride= 2, padding  = 1),
+                    nn.BatchNorm2d(h_dim),
+                    nn.LeakyReLU())
+            )
+            in_channels = h_dim
 
-        # self.feat_net = nn.Sequential(*modules)
-        # self.fc_net = nn.Linear(hidden_dims[-1] * 4 * 4, latent_dim)
+        self.feat_net = nn.Sequential(*modules)
+        self.fc_net = nn.Linear(hidden_dims[-1] * 4 * 4, latent_dim)
         
 
         

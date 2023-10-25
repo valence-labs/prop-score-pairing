@@ -52,9 +52,11 @@ class DomainSampler(BatchSampler):
 MU = np.array([0.998, 0.998, 0.998])
 SIG = np.array([0.034, 0.025, 0.025])
 
-MU_noisy = np.array([0.50454001, 0.75075871, 0.40544085])
-SIG_noisy = np.array([0.29195627, 0.14611416, 0.05556526])
+MU_noisy_1 = np.array([0.50454001, 0.75075871, 0.40544085])
+SIG_noisy_1 = np.array([0.29195627, 0.14611416, 0.05556526])
 
+MU_noisy_2 = np.array([0.98185011, 0.75588502, 0.09406329])
+SIG_noisy_2 = np.array([0.05103349, 0.15451756, 0.15762656])
 class BallsDataset(Dataset):
     """
     Modified from Sparse Mechanisms
@@ -88,15 +90,30 @@ class BallsDataset(Dataset):
 class NoisyBallsDataset(BallsDataset):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.transform = transforms.Compose(
+        self.transform1 = transforms.Compose(
         [
             transforms.ToTensor(),
             transforms.Normalize(
-                mean=MU_noisy,  # channel means - the images are mostly white so close to 1.
-                std=SIG_noisy,
+                mean=MU_noisy_1,  
+                std=SIG_noisy_1,
             ),
         ]
         )
+        self.transform2 = transforms.Compose(
+        [
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=MU_noisy_2,  
+                std=SIG_noisy_2,
+            ),
+        ]
+        )
+
+        def __getitem__(self, index):
+            x1, x2, y, z = self.x1[index], self.x2[index], torch.tensor(self.y[index]).long(), torch.tensor(self.z[index]).float().flatten()
+            x1, x2 = self.transform1(x1), self.transform2(x2)
+
+            return x1, x2, y, z
 class BallsDataModule(LightningDataModule):
     def __init__(self,batch_size):
         super().__init__()
@@ -123,14 +140,14 @@ class BallsDataModule(LightningDataModule):
         # self.y_full = np.concatenate((self.y_tr, self.y_val, self.y_test))
         # self.z_full = np.concatenate((self.z_tr, self.z_val, self.z_test))
         self.labels = convert_to_labels(self.y_tr)
-        self.train_dataset = self.dataset(self.x1_tr, self.x2_tr, self.y_tr, self.z_tr)
+        self.train_dataset = self.dataset(x1 = self.x1_tr, x2 = self.x2_tr, y = self.y_tr, z = self.z_tr)
 
     def train_dataloader(self):
-        return DataLoader(self.dataset(self.x1_tr, self.x2_tr, self.y_tr, self.z_tr), batch_size = self.batch_size, num_workers=8)
+        return DataLoader(self.dataset(x1 = self.x1_tr, x2 = self.x2_tr, y = self.y_tr, z = self.z_tr), batch_size = self.batch_size, num_workers=8)
     def val_dataloader(self):
-        return DataLoader(self.dataset(self.x1_val, self.x2_val, self.y_val, self.z_val), batch_size = self.batch_size, num_workers=8)
+        return DataLoader(self.dataset(x1 = self.x1_val, x2 = self.x2_val, y = self.y_val, z = self.z_val), batch_size = self.batch_size, num_workers=8)
     def test_dataloader(self):
-        return DataLoader(self.dataset(self.x1_test, self.x2_test, self.y_test, self.z_test), batch_size = self.batch_size, num_workers=8)
+        return DataLoader(self.dataset(x1 = self.x1_test, x2 = self.x2_test, y = self.y_test, z = self.z_test), batch_size = self.batch_size, num_workers=8)
 
 class NoisyBallsDataModule(BallsDataModule):
     def __init__(self,batch_size):

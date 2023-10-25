@@ -111,7 +111,7 @@ class BaseVAEModule(LightningModule):
         recon_2, z_2, mu_2, log_var_2 = VAE_2_output
         loss_1 = self.loss_function(recon_1, x1, mu_1, log_var_1)
         loss_2 = self.loss_function(recon_2, x2, mu_2, log_var_2)
-
+        
         x1_labels = torch.zeros(x1.size(0),).long().to("cuda")
         x2_labels = torch.ones(x2.size(0),).long().to("cuda")
 
@@ -139,6 +139,7 @@ class BaseVAEModule(LightningModule):
                 "md1_loss": loss_1["vae_loss"],
                 "md2_loss": loss_2["vae_loss"]}
 
+    ## taken from ## adapted from https://github.com/AntixK/PyTorch-VAE/blob/master/models/vanilla_vae.py    
     def loss_function(self, 
                       recons,
                       input,
@@ -182,10 +183,12 @@ class BaseVAEModule(LightningModule):
         ## placeholders to compute matching metrics on the fly
         labels = self.trainer.datamodule.labels # type: ignore[attr-defined]
         num_classes, class_weights = compute_class_weights(labels)
-        self.CE_Cond = torch.nn.CrossEntropyLoss(weight = torch.from_numpy(class_weights).float())
+        self.CE_Cond = torch.nn.CrossEntropyLoss()  # torch.nn.CrossEntropyLoss(weight = torch.from_numpy(class_weights).float())
         self.CE = torch.nn.CrossEntropyLoss()
 
-        self.condclf = self.net = nn.Sequential(
+        ## taken from caroline's paper
+        
+        self.condclf = nn.Sequential(
             nn.Linear(self.model1.latent_dim, num_classes),
         )
 
@@ -204,6 +207,7 @@ class BaseVAEModule(LightningModule):
         pass
 
     def configure_optimizers(self):
+        ## change to adam 
         optimizer = optim.SGD(self.parameters(), lr = self.lr, weight_decay = self.wd, momentum = self.momentum)
         scheduler = optim.lr_scheduler.OneCycleLR(optimizer, max_lr = self.lr, total_steps = self.trainer.max_epochs, pct_start = 0.1)
         return [optimizer], [{"scheduler": scheduler, "interval": "epoch"}]
@@ -292,7 +296,7 @@ class VanillaVAE(nn.Module):
                             nn.LeakyReLU(),
                             nn.Conv2d(hidden_dims[-1], out_channels= 3,
                                       kernel_size= 3, padding= 1),
-                            nn.Tanh())
+                            nn.Tanh())  ## (3 x 128 x 128) 
 
     def encode(self, input: Tensor) -> List[Tensor]:
         """
@@ -375,6 +379,9 @@ class GEXADTVAE(VanillaVAE):
                  ) -> None:
         super().__init__()
         self.latent_dim = latent_dim
+
+        ## taken from carolines group
+                     
         self.encoder = nn.Sequential(nn.Linear(input_dim, n_hidden),
                                 nn.ReLU(inplace=True),
                                 nn.BatchNorm1d(n_hidden),

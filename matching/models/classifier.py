@@ -29,7 +29,7 @@ class BallsClassifier(BaseClassifier):
             torch.nn.Linear(latent_dim, 12)
         )
         self.clf1 = torch.nn.Sequential(self.Encoder_1, self.logits_1)
-        self.clf2 = torch.nn.Sequential(self.Encoder_1, self.logits_1)
+        self.clf2 = torch.nn.Sequential(self.Encoder_2, self.logits_2)
 
     def configure_optimizers(self):
         optimizer = optim.SGD([{'params':self.Encoder_1.feat_net.parameters(), 'lr':self.rnlr, 'momentum': self.rnmomentum, 'weight_decay':self.rnwd}, 
@@ -39,6 +39,8 @@ class BallsClassifier(BaseClassifier):
                           {'params':self.logits_1.parameters()},
                           {'params':self.logits_2.parameters()}], 
                           lr = self.lr, weight_decay = self.wd, momentum = self.momentum)
+        ## optimizer = optim.Adam(self.parameters())
+        ## scheduler = optim.lr_scheduler.OneCycleLR(optimizer, max_lr = self.lr, total_steps = self.trainer.max_epochs, pct_start = 0.1)
         scheduler = optim.lr_scheduler.OneCycleLR(optimizer, max_lr = [self.rnlr, self.rnlr, self.lr, self.lr, self.lr, self.lr], total_steps = self.trainer.max_epochs, pct_start = 0.1)
         return [optimizer], [{"scheduler": scheduler, "interval": "epoch"}]
     
@@ -56,6 +58,8 @@ class GEXADT_Classifier(BaseClassifier):
         ### implement clf1 as adt classifier
         ### implement clf2 as gex classifier
 
+        ## Encoder from Caroline's lab
+                    
         self.encoder_1 = nn.Sequential(nn.LazyLinear(out_features = n_hidden),
                                 nn.ReLU(inplace=True),
                                 nn.BatchNorm1d(n_hidden),

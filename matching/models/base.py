@@ -7,7 +7,6 @@ from .. import compute_class_weights, convert_to_labels
 from typing import List, Callable, Union, Any, TypeVar, Tuple
 from torchvision.models import resnet18, resnet50, resnet34
 
-
 Tensor = TypeVar('torch.tensor')
 class BaseClassifier(LightningModule):
     def __init__(self, 
@@ -75,14 +74,20 @@ class BaseClassifier(LightningModule):
     
 class BaseVAEModule(LightningModule):
     def __init__(self, 
-                 lr: float = 0.0005, 
-                 wd: float = 0.0001,
-                 momentum: float = 0.9):
+                 lr: float = 0.0001, 
+                 wd: float = 0.00001,
+                 momentum: float = 0.8,
+                 lamb: float = 0.0000000001,
+                 alpha: float = 1,
+                 beta: float = 0):
         super().__init__()
 
         self.lr = lr
         self.wd = wd
         self.momentum = momentum
+        self.lamb = lamb
+        self.alpha = alpha
+        self.beta = beta
 
         ## subclasses should define self.model1, model2 VAEs for each modality in their init
         ## vaes should have attribute self.model1.latent_dim
@@ -90,7 +95,7 @@ class BaseVAEModule(LightningModule):
     def forward(self, x1, x2):
         ## x1, x2 are different views of the scene
         ## primarily used for forward call in callbacks
-        latent_1 = self.model1(x1)[1]  ## pick out latent mean 
+        latent_1 = self.model1(x1)[1]  ## pick out latent 
         latent_2 = self.model2(x2)[1] 
         return latent_1, latent_2
     
@@ -104,8 +109,8 @@ class BaseVAEModule(LightningModule):
         ### unpack
         recon_1, z_1, mu_1, log_var_1 = VAE_1_output
         recon_2, z_2, mu_2, log_var_2 = VAE_2_output
-        loss_1 = VanillaVAE.loss_function(recon_1, x1, mu_1, log_var_1)
-        loss_2 = VanillaVAE.loss_function(recon_2, x2, mu_2, log_var_2)
+        loss_1 = self.loss_function(recon_1, x1, mu_1, log_var_1)
+        loss_2 = self.loss_function(recon_2, x2, mu_2, log_var_2)
 
         x1_labels = torch.zeros(x1.size(0),).long().to("cuda")
         x2_labels = torch.ones(x2.size(0),).long().to("cuda")
@@ -126,13 +131,34 @@ class BaseVAEModule(LightningModule):
         self.log("Modality Classifier Loss", loss_clf)
         self.log("Label Classifier Loss", loss_condclf)
 
-        loss = (loss_1["vae_loss"] + loss_2["vae_loss"]) + loss_clf + loss_condclf
+        loss = loss_1["vae_loss"] + loss_2["vae_loss"] + self.alpha * loss_clf + self.beta * loss_condclf
 
         self.log("VAE Total Training Loss", loss)
 
         return {"loss": loss,
                 "md1_loss": loss_1["vae_loss"],
                 "md2_loss": loss_2["vae_loss"]}
+
+    def loss_function(self, 
+                      recons,
+                      input,
+                      mu,
+                      log_var) -> dict:
+        """
+        Computes the VAE loss function.
+        KL(N(\mu, \sigma), N(0, 1)) = \log \frac{1}{\sigma} + \frac{\sigma^2 + \mu^2}{2} - \frac{1}{2}
+        :param args:
+        :param kwargs:
+        :return:
+        """
+
+        recons_loss = F.mse_loss(recons, input)
+
+        kld_loss = torch.mean(-0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim = 1), dim = 0)
+        print(self.lamb)
+        loss = recons_loss + self.lamb * kld_loss
+        return {'vae_loss': loss, 'Reconstruction_Loss':recons_loss, 'KLD':-kld_loss}
+
     
     def validation_step(self, batch, batch_idx):
         ## we only use validation to see how the classifier is doing 
@@ -157,6 +183,7 @@ class BaseVAEModule(LightningModule):
         labels = self.trainer.datamodule.labels # type: ignore[attr-defined]
         num_classes, class_weights = compute_class_weights(labels)
         self.CE_Cond = torch.nn.CrossEntropyLoss(weight = torch.from_numpy(class_weights).float())
+        self.CE = torch.nn.CrossEntropyLoss()
 
         self.condclf = self.net = nn.Sequential(
             nn.Linear(self.model1.latent_dim, num_classes),
@@ -172,7 +199,6 @@ class BaseVAEModule(LightningModule):
             nn.Linear(1024,2) ## 2 is number of modalities
         )
 
-        self.CE = torch.nn.CrossEntropyLoss()
 
     def on_train_epoch_end(self):
         pass
@@ -184,15 +210,17 @@ class BaseVAEModule(LightningModule):
     
 class GEXADTVAEModule(BaseVAEModule):
     def __init__(self,
+                 **kwargs
                  ):
-        super().__init__()
+        super().__init__(**kwargs)
         self.model1 = GEXADTVAE(input_dim = 134)  ## adt
         self.model2 = GEXADTVAE(input_dim = 200)  ## GEX PCA
 
 class ImageVAEModule(BaseVAEModule):
     def __init__(self,
+                 **kwargs
                  ):
-        super().__init__()
+        super().__init__(**kwargs)
         self.model1 = VanillaVAE()  ## View 1
         self.model2 = VanillaVAE()  ## View 2
 
@@ -200,7 +228,7 @@ class ImageVAEModule(BaseVAEModule):
 class VanillaVAE(nn.Module):
     def __init__(self,
                  in_channels: int = 3,
-                 latent_dim: int = 128,
+                 latent_dim: int = 512,
                  hidden_dims: List = None
                  ) -> None:
         super(VanillaVAE, self).__init__()
@@ -211,25 +239,25 @@ class VanillaVAE(nn.Module):
         if hidden_dims is None:
             hidden_dims = [32, 64, 128, 256, 512]
 
-        # # Build Encoder
-        # for h_dim in hidden_dims:
-        #     modules.append(
-        #         nn.Sequential(
-        #             nn.Conv2d(in_channels, out_channels=h_dim,
-        #                       kernel_size= 3, stride= 2, padding  = 1),
-        #             nn.BatchNorm2d(h_dim),
-        #             nn.LeakyReLU())
-        #     )
-        #     in_channels = h_dim
+        # Build Encoder
+        for h_dim in hidden_dims:
+            modules.append(
+                nn.Sequential(
+                    nn.Conv2d(in_channels, out_channels=h_dim,
+                              kernel_size= 3, stride= 2, padding  = 1),
+                    nn.BatchNorm2d(h_dim),
+                    nn.LeakyReLU())
+            )
+            in_channels = h_dim
 
-        # self.encoder = nn.Sequential(*modules)
-        # self.fc_mu = nn.Linear(hidden_dims[-1] * 4 * 4, latent_dim)
-        # self.fc_var = nn.Linear(hidden_dims[-1] * 4 * 4, latent_dim)
-        self.base_model = resnet18(pretrained=True) 
-        self.feat_layers= list(self.base_model.children())[:-1]
-        self.encoder = nn.Sequential(*self.feat_layers)
-        self.fc_mu = nn.Linear(512, latent_dim)
-        self.fc_var = nn.Linear(512, latent_dim)
+        self.encoder = nn.Sequential(*modules)
+        self.fc_mu = nn.Linear(hidden_dims[-1] * 4 * 4, latent_dim)
+        self.fc_var = nn.Linear(hidden_dims[-1] * 4 * 4, latent_dim)
+        # self.base_model = resnet18(pretrained=True) 
+        # self.feat_layers= list(self.base_model.children())[:-1]
+        # self.encoder = nn.Sequential(*self.feat_layers)
+        # self.fc_mu = nn.Linear(512, latent_dim)
+        # self.fc_var = nn.Linear(512, latent_dim)
         # 
         # Build Decoder
         modules = []
@@ -312,27 +340,6 @@ class VanillaVAE(nn.Module):
         z = self.reparameterize(mu, log_var)
         return  [self.decode(z), z, mu, log_var]
     
-    @staticmethod
-    def loss_function(recons,
-                      input,
-                      mu,
-                      log_var,
-                      lamb: float = 0.00000001) -> dict:
-        """
-        Computes the VAE loss function.
-        KL(N(\mu, \sigma), N(0, 1)) = \log \frac{1}{\sigma} + \frac{\sigma^2 + \mu^2}{2} - \frac{1}{2}
-        :param args:
-        :param kwargs:
-        :return:
-        """
-
-        recons_loss = F.mse_loss(recons, input)
-
-        kld_loss = torch.mean(-0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim = 1), dim = 0)
-
-        loss = recons_loss + lamb * kld_loss
-        return {'vae_loss': loss, 'Reconstruction_Loss':recons_loss.detach(), 'KLD':-kld_loss.detach()}
-
     def sample(self,
                num_samples:int,
                current_device: int, **kwargs) -> Tensor:

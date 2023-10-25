@@ -1,7 +1,7 @@
 import sys
 import numpy as np
 import torch
-from torch import optim
+from torch import optim, nn
 
 from .encoders import ImageEncoder
 from .base import BaseClassifier
@@ -50,22 +50,48 @@ class BallsClassifier(BaseClassifier):
 class GEXADT_Classifier(BaseClassifier):
     def __init__(self, 
                  n_classes: int = 45,
+                 n_hidden: int = 1024,
                 **kwargs):
         super().__init__(**kwargs)
         ### implement clf1 as adt classifier
         ### implement clf2 as gex classifier
+
+        self.encoder_1 = nn.Sequential(nn.LazyLinear(out_features = n_hidden),
+                                nn.ReLU(inplace=True),
+                                nn.BatchNorm1d(n_hidden),
+                                nn.Linear(n_hidden, n_hidden),
+                                nn.BatchNorm1d(n_hidden),
+                                nn.ReLU(inplace=True),
+                                nn.Linear(n_hidden, n_hidden),
+                                nn.BatchNorm1d(n_hidden),
+                                nn.ReLU(inplace=True),
+                                nn.Linear(n_hidden, n_hidden),
+                                nn.BatchNorm1d(n_hidden),
+                                nn.ReLU(inplace=True),
+                                nn.Linear(n_hidden, n_hidden),
+                                )
+        
+        self.encoder_2 = nn.Sequential(nn.LazyLinear(out_features = n_hidden),
+                                nn.ReLU(inplace=True),
+                                nn.BatchNorm1d(n_hidden),
+                                nn.Linear(n_hidden, n_hidden),
+                                nn.BatchNorm1d(n_hidden),
+                                nn.ReLU(inplace=True),
+                                nn.Linear(n_hidden, n_hidden),
+                                nn.BatchNorm1d(n_hidden),
+                                nn.ReLU(inplace=True),
+                                nn.Linear(n_hidden, n_hidden),
+                                nn.BatchNorm1d(n_hidden),
+                                nn.ReLU(inplace=True),
+                                nn.Linear(n_hidden, n_hidden),
+                                )
+        
         self.clf1 = torch.nn.Sequential(
-            torch.nn.LazyLinear(out_features=256),
-            torch.nn.ReLU(),
-            torch.nn.LazyLinear(out_features=256),
-            torch.nn.ReLU(),
-            torch.nn.LazyLinear(out_features=n_classes)
+            self.encoder_1,
+            torch.nn.Linear(n_hidden, n_classes)
         )
         self.clf2 = torch.nn.Sequential(
-            torch.nn.LazyLinear(out_features=256),
-            torch.nn.ReLU(),
-            torch.nn.LazyLinear(out_features=256),
-            torch.nn.ReLU(),
-            torch.nn.LazyLinear(out_features=n_classes)
+            self.encoder_2,
+            torch.nn.Linear(n_hidden, n_classes)
         )
 

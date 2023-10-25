@@ -56,6 +56,9 @@ MU_noisy = np.array([0.50454001, 0.75075871, 0.40544085])
 SIG_noisy = np.array([0.29195627, 0.14611416, 0.05556526])
 
 class BallsDataset(Dataset):
+    """
+    Modified from Sparse Mechanisms
+    """
     def __init__(self, x1, x2, y, z):
         super().__init__()
         self.x1 = x1
@@ -223,8 +226,8 @@ class GEXADTDataset(Dataset):
     
     def process_row(self, row):
         label = torch.tensor(row["CT_id"]).long()
-        dat = row.filter(regex="^[0-9]").astype("float32")
-        dat_tensor = torch.from_numpy(dat.values).float()
+        dat = row.filter(regex="^[0-9]").astype("float32")  ## the data columns starts with numeric and metadata is non-numeric
+        dat_tensor = torch.from_numpy(dat.values).float() 
 
         return dat_tensor, label
 

@@ -85,7 +85,7 @@ class BallsDataset(Dataset):
 
         return x1, x2, y, z
     
-class BallsDataset(BallsDataset):
+class NoisyBallsDataset(BallsDataset):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.transform = transforms.Compose(

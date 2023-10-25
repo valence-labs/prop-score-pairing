@@ -68,7 +68,7 @@ class BaseClassifier(LightningModule):
         pass
 
     def configure_optimizers(self):
-        optimizer = optim.SGD(self.parameters(), lr = self.lr, weight_decay = self.wd, momentum = self.momentum)
+        optimizer = optim.Adam(self.parameters(), lr = self.lr, weight_decay = self.wd)
         scheduler = optim.lr_scheduler.OneCycleLR(optimizer, max_lr = self.lr, total_steps = self.trainer.max_epochs, pct_start = 0.1)
         return [optimizer], [{"scheduler": scheduler, "interval": "epoch"}]
     
@@ -208,7 +208,7 @@ class BaseVAEModule(LightningModule):
 
     def configure_optimizers(self):
         ## change to adam 
-        optimizer = optim.SGD(self.parameters(), lr = self.lr, weight_decay = self.wd, momentum = self.momentum)
+        optimizer = optim.Adam(self.parameters(), lr = self.lr, weight_decay = self.wd)
         scheduler = optim.lr_scheduler.OneCycleLR(optimizer, max_lr = self.lr, total_steps = self.trainer.max_epochs, pct_start = 0.1)
         return [optimizer], [{"scheduler": scheduler, "interval": "epoch"}]
     

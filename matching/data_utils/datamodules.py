@@ -49,8 +49,11 @@ class DomainSampler(BatchSampler):
 
 
 
-MU = np.array([0.9906, 0.9902, 0.9922])
-SIG = np.array([0.008, 0.008, 0.008])
+MU = np.array([0.998, 0.998, 0.998])
+SIG = np.array([0.034, 0.025, 0.025])
+
+MU_noisy = np.array([0.50454001, 0.75075871, 0.40544085])
+SIG_noisy = np.array([0.29195627, 0.14611416, 0.05556526])
 
 class BallsDataset(Dataset):
     def __init__(self, x1, x2, y, z):
@@ -78,10 +81,24 @@ class BallsDataset(Dataset):
         x1, x2 = self.transform(x1), self.transform(x2)
 
         return x1, x2, y, z
+    
+class BallsDataset(BallsDataset):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.transform = transforms.Compose(
+        [
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=MU_noisy,  # channel means - the images are mostly white so close to 1.
+                std=SIG_noisy,
+            ),
+        ]
+        )
 class BallsDataModule(LightningDataModule):
     def __init__(self,batch_size):
         super().__init__()
         self.batch_size = batch_size
+        self.dataset = BallsDataset
     def prepare_data(self):
         self.data_dir = "/mnt/ps/home/CORP/johnny.xi/sandbox/matching/data/datasets/balls_scm_non_linear/intervention/"
     def setup(self, stage:str):
@@ -103,16 +120,19 @@ class BallsDataModule(LightningDataModule):
         # self.y_full = np.concatenate((self.y_tr, self.y_val, self.y_test))
         # self.z_full = np.concatenate((self.z_tr, self.z_val, self.z_test))
         self.labels = convert_to_labels(self.y_tr)
-        self.train_dataset = BallsDataset(self.x1_tr, self.x2_tr, self.y_tr, self.z_tr)
+        self.train_dataset = self.dataset(self.x1_tr, self.x2_tr, self.y_tr, self.z_tr)
 
     def train_dataloader(self):
-        return DataLoader(BallsDataset(self.x1_tr, self.x2_tr, self.y_tr, self.z_tr), batch_size = self.batch_size, num_workers=8)
+        return DataLoader(self.dataset(self.x1_tr, self.x2_tr, self.y_tr, self.z_tr), batch_size = self.batch_size, num_workers=8)
     def val_dataloader(self):
-        return DataLoader(BallsDataset(self.x1_val, self.x2_val, self.y_val, self.z_val), batch_size = self.batch_size, num_workers=8)
+        return DataLoader(self.dataset(self.x1_val, self.x2_val, self.y_val, self.z_val), batch_size = self.batch_size, num_workers=8)
     def test_dataloader(self):
-        return DataLoader(BallsDataset(self.x1_test, self.x2_test, self.y_test, self.z_test), batch_size = self.batch_size, num_workers=8)
+        return DataLoader(self.dataset(self.x1_test, self.x2_test, self.y_test, self.z_test), batch_size = self.batch_size, num_workers=8)
 
 class NoisyBallsDataModule(BallsDataModule):
+    def __init__(self,batch_size):
+        super().__init__(batch_size)
+        self.dataset = NoisyBallsDataset
     def prepare_data(self):
         self.data_dir = "/mnt/ps/home/CORP/johnny.xi/sandbox/matching/data/datasets/noisyballs_scm_non_linear/intervention/"
 

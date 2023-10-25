@@ -292,7 +292,7 @@ class VanillaVAE(nn.Module):
                             nn.LeakyReLU(),
                             nn.Conv2d(hidden_dims[-1], out_channels= 3,
                                       kernel_size= 3, padding= 1),
-                            nn.Tanh())
+                            nn.Sigmoid())  ## our images are [0,1]
 
     def encode(self, input: Tensor) -> List[Tensor]:
         """

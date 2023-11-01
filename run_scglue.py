@@ -20,13 +20,7 @@ gex_ad.X = gex_ad.layers["counts"].copy()
 sc.pp.normalize_total(gex_ad)
 sc.pp.log1p(gex_ad)
 sc.pp.scale(gex_ad)
-sc.tl.pca(gex_ad, n_comps=100, svd_solver="auto")
-
-adt_ad.X = adt_ad.layers["counts"].copy()
-sc.pp.normalize_total(adt_ad)
-sc.pp.log1p(adt_ad)
-sc.pp.scale(adt_ad)
-sc.tl.pca(adt_ad, n_comps=100, svd_solver="auto")
+sc.tl.pca(gex_ad, n_comps=200, svd_solver="auto")
 
 p = np.array(adt_ad.var_names)
 r = np.array(gex_ad.var_names)
@@ -56,7 +50,7 @@ scglue.models.configure_dataset(
     gex_ad,
     "NB",
     use_highly_variable=False,
-    use_batch="Samplename",
+    use_batch="batch",
     use_layer="counts",
     use_rep="X_pca",
 )
@@ -65,13 +59,13 @@ scglue.models.configure_dataset(
     adt_ad,
     "Normal",
     use_highly_variable=False,
-    use_batch="Samplename",
-    use_rep="X_pca",
+    use_batch="batch",
+    use_layer="counts"
 )
 
 glue = scglue.models.fit_SCGLUE(
     {"rna": gex_ad, "adt": adt_ad},
-    graph,
+    graph
 )
 
 rna_encodings = glue.encode_data("rna", gex_ad)
@@ -83,13 +77,13 @@ knn_trace_avg, eot_trace_avg, knn_foscttm_avg, eot_foscttm_avg = 0, 0, 0, 0
 
 for ct in cell_types:
     idx = np.where(gex_ad.obs.cell_type == ct)
-    rna_sub, adt_sub = gex_ad.obsm["X_pca"][idx], adt_ad.obsm["X_pca"][idx]
+    rna_sub, adt_sub = gex_ad.obsm["X_pca"][idx], adt_ad.X.toarray()[idx]
     rna_match_sub, adt_match_sub = rna_encodings[idx], adt_encodings[idx]
     print(f"Cell type: {ct}, Number of samples: {rna_sub.shape[0]}")
     snn_sub = snn_matching(rna_match_sub, adt_match_sub)
-    print(f"Cell type: {ct}, kNN trace: {np.trace(snn_sub)}")
-    eot_sub = eot_matching(rna_match_sub, adt_match_sub, use_sinkhorn_log = True, verbose = False, max_iter = 200)
-    print(f"Cell type: {ct}, EOT trace: {np.trace(eot_sub)}")
+    print(f"Cell type: {ct}, kNN trace: {np.trace(snn_sub)/rna_sub.shape[0]}")
+    eot_sub = eot_matching(rna_match_sub, adt_match_sub)
+    print(f"Cell type: {ct}, EOT trace: {np.trace(eot_sub)/rna_sub.shape[0]}")
     snn_match = snn_sub @ adt_sub
     eot_match = eot_sub @ adt_sub
     knn_foscttm = np.array(calc_domainAveraged_FOSCTTM(adt_sub, snn_match)).mean()

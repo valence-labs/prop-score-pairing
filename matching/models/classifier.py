@@ -8,7 +8,7 @@ from .base import BaseClassifier
 
 class BallsClassifier(BaseClassifier):
     def __init__(self, 
-                latent_dim: int = 32,
+                latent_dim: int = 128,
                 **kwargs):
         
         super().__init__(**kwargs)

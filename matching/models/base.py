@@ -45,6 +45,7 @@ class BaseClassifier(LightningModule):
         loss_dict = self.training_step(batch, batch_idx)
         self.log("val loss 1", loss_dict["md1_loss"])
         self.log("val loss 2", loss_dict["md2_loss"])
+        self.log("full_val_loss", 0.5*loss_dict["loss"]) ## used for checkpointing
 
     def on_validation_epoch_end(self): 
         pass
@@ -60,9 +61,7 @@ class BaseClassifier(LightningModule):
 
     def setup(self, stage:str):
         ## placeholders to compute matching metrics on the fly
-        labels = self.trainer.datamodule.labels # type: ignore[attr-defined]
-        num_classes, class_weights = compute_class_weights(labels)
-        self.loss = torch.nn.CrossEntropyLoss(weight = torch.from_numpy(class_weights).float())
+        pass
 
     def on_train_epoch_end(self):
         pass
@@ -79,7 +78,9 @@ class BaseVAEModule(LightningModule):
                  momentum: float = 0.8,
                  lamb: float = 0.0000000001,
                  alpha: float = 1,
-                 beta: float = 0):
+                 beta: float = 0,
+                 num_classes: int = 45,
+                 latent_dim: int = 128):
         super().__init__()
 
         self.lr = lr
@@ -91,6 +92,26 @@ class BaseVAEModule(LightningModule):
 
         ## subclasses should define self.model1, model2 VAEs for each modality in their init
         ## vaes should have attribute self.model1.latent_dim
+
+        self.CE_Cond = torch.nn.CrossEntropyLoss()  # torch.nn.CrossEntropyLoss(weight = torch.from_numpy(class_weights).float())
+        self.CE = torch.nn.CrossEntropyLoss()
+
+        ## taken from caroline's paper
+        
+        self.condclf = nn.Sequential(
+            nn.Linear(latent_dim, num_classes),
+        )
+
+        self.clf = nn.Sequential(
+            nn.Linear(latent_dim, 1024),
+            nn.ReLU(inplace=True),
+            nn.Linear(1024, 1024),
+            nn.ReLU(inplace=True),
+            nn.Linear(1024, 1024),
+            nn.ReLU(inplace=True),
+            nn.Linear(1024,2) ## 2 is number of modalities
+        )
+
 
     def forward(self, x1, x2):
         ## x1, x2 are different views of the scene
@@ -161,10 +182,8 @@ class BaseVAEModule(LightningModule):
 
     
     def validation_step(self, batch, batch_idx):
-        ## we only use validation to see how the classifier is doing 
         loss_dict = self.training_step(batch, batch_idx)
-        self.log("val vae loss 1", loss_dict["md1_loss"])
-        self.log("val vae loss 2", loss_dict["md2_loss"])
+        self.log("full_val_loss", loss_dict["loss"])  ## flag for checkpointing
 
     def on_validation_epoch_end(self): 
         pass
@@ -179,28 +198,7 @@ class BaseVAEModule(LightningModule):
         pass
 
     def setup(self, stage:str):
-        ## placeholders to compute matching metrics on the fly
-        labels = self.trainer.datamodule.labels # type: ignore[attr-defined]
-        num_classes, class_weights = compute_class_weights(labels)
-        self.CE_Cond = torch.nn.CrossEntropyLoss()  # torch.nn.CrossEntropyLoss(weight = torch.from_numpy(class_weights).float())
-        self.CE = torch.nn.CrossEntropyLoss()
-
-        ## taken from caroline's paper
-        
-        self.condclf = nn.Sequential(
-            nn.Linear(self.model1.latent_dim, num_classes),
-        )
-
-        self.clf = nn.Sequential(
-            nn.Linear(self.model1.latent_dim, 1024),
-            nn.ReLU(inplace=True),
-            nn.Linear(1024, 1024),
-            nn.ReLU(inplace=True),
-            nn.Linear(1024, 1024),
-            nn.ReLU(inplace=True),
-            nn.Linear(1024,2) ## 2 is number of modalities
-        )
-
+        pass
 
     def on_train_epoch_end(self):
         pass
@@ -215,7 +213,7 @@ class GEXADTVAEModule(BaseVAEModule):
     def __init__(self,
                  **kwargs
                  ):
-        super().__init__(**kwargs)
+        super().__init__(**kwargs, num_classes = 45, latent_dim = 128)
         self.model1 = GEXADTVAE(input_dim = 134)  ## adt
         self.model2 = GEXADTVAE(input_dim = 200)  ## GEX PCA
 
@@ -223,9 +221,10 @@ class ImageVAEModule(BaseVAEModule):
     def __init__(self,
                  **kwargs
                  ):
-        super().__init__(**kwargs)
+        super().__init__(**kwargs, num_classes = 12, latent_dim = 512)
         self.model1 = VanillaVAE()  ## View 1
         self.model2 = VanillaVAE()  ## View 2
+
 
 ## adapted from https://github.com/AntixK/PyTorch-VAE/blob/master/models/vanilla_vae.py    
 class VanillaVAE(nn.Module):

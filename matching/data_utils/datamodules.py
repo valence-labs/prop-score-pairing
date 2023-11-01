@@ -115,7 +115,8 @@ class NoisyBallsDataset(BallsDataset):
 
             return x1, x2, y, z
 class BallsDataModule(LightningDataModule):
-    def __init__(self,batch_size):
+    def __init__(self,
+                 batch_size: int = 100):
         super().__init__()
         self.batch_size = batch_size
         self.dataset = BallsDataset
@@ -141,7 +142,9 @@ class BallsDataModule(LightningDataModule):
         # self.z_full = np.concatenate((self.z_tr, self.z_val, self.z_test))
         self.labels = convert_to_labels(self.y_tr)
         self.train_dataset = self.dataset(x1 = self.x1_tr, x2 = self.x2_tr, y = self.y_tr, z = self.z_tr)
-
+        if stage == "test":
+            self.val_dataset = self.dataset(x1 = self.x1_val, x2 = self.x2_val, y = self.y_val, z = self.z_val)
+            self.test_dataset = self.dataset(x1 = self.x1_test, x2 = self.x2_test, y = self.y_test, z = self.z_test)
     def train_dataloader(self):
         return DataLoader(self.dataset(x1 = self.x1_tr, x2 = self.x2_tr, y = self.y_tr, z = self.z_tr), batch_size = self.batch_size, num_workers=8)
     def val_dataloader(self):
@@ -150,15 +153,15 @@ class BallsDataModule(LightningDataModule):
         return DataLoader(self.dataset(x1 = self.x1_test, x2 = self.x2_test, y = self.y_test, z = self.z_test), batch_size = self.batch_size, num_workers=8)
 
 class NoisyBallsDataModule(BallsDataModule):
-    def __init__(self,batch_size):
-        super().__init__(batch_size)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.dataset = NoisyBallsDataset
     def prepare_data(self):
         self.data_dir = "/mnt/ps/home/CORP/johnny.xi/sandbox/matching/data/datasets/noisyballs_scm_non_linear/intervention/"
 
 class GEXADTDataModule(LightningDataModule):
     def __init__(self,
-        batch_size: int,
+        batch_size: int = 256,
         d1_sub: bool = False
         ) -> None:
         super().__init__()
@@ -171,6 +174,10 @@ class GEXADTDataModule(LightningDataModule):
         train_idx = df["split"] == "train"
         val_idx = df["split"] == "val"
         test_idx = df["split"] == "test" 
+        print(np.sum(train_idx))
+        print(np.sum(val_idx))
+        print(np.sum(test_idx))
+        print(len(train_idx))
         if min(np.sum(train_idx), np.sum(val_idx), np.sum(test_idx)) > 0.01*len(train_idx): ## If each split is at least 1% of full data
             train_df = df[train_idx].reset_index()
             val_df = df[val_idx].reset_index()
@@ -179,7 +186,7 @@ class GEXADTDataModule(LightningDataModule):
             df = df.reset_index()
             train_df = df[:round(len(df)*0.8)].reset_index()
             val_df = df[round(len(df)*0.8):round(len(df)*0.9)].reset_index()
-            test_df = df[:round(len(df)*0.9)].reset_index()
+            test_df = df[round(len(df)*0.9):].reset_index()
         return train_df, val_df, test_df
 
     def load_data(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -209,7 +216,11 @@ class GEXADTDataModule(LightningDataModule):
         self.test_data_gex = test_df_gex
 
         self.train_dataset = GEXADTDataset(self.train_data_adt, self.train_data_gex)
-        self.labels = torch.tensor(self.train_data_adt.CT_id).long()        
+        self.labels = torch.tensor(self.train_data_adt.CT_id).long()     
+
+        if stage == "test":
+            self.val_dataset = GEXADTDataset(self.val_data_adt, self.val_data_gex)
+            self.test_dataset = GEXADTDataset(self.test_data_adt, self.test_data_gex)   
     
     def train_dataloader(self) -> DataLoader:
         train_dataset = GEXADTDataset(
@@ -228,7 +239,7 @@ class GEXADTDataModule(LightningDataModule):
     def test_dataloader(self) -> DataLoader:
         test_dataset = GEXADTDataset(
             self.test_data_adt,
-            self.vest_data_gex            
+            self.test_data_gex            
             )
         return DataLoader(test_dataset, batch_sampler = DomainSampler(self.test_data_adt, batch_size = self.batch_size), num_workers = 8)
 

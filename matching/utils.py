@@ -64,11 +64,13 @@ def snn_matching(x: np.ndarray, y: np.ndarray, k: Optional[int] = 1):
     y = y / np.linalg.norm(y, axis=1, keepdims=True)
 
     ky = k or min(round(0.01 * y.shape[0]), 1000)
+    print(ky)
     nny = NearestNeighbors(n_neighbors=ky, p=2).fit(y)
     x2y = nny.kneighbors_graph(x)
     y2y = nny.kneighbors_graph(y)
 
     kx = k or min(round(0.01 * x.shape[0]), 1000)
+    print(kx)
     nnx = NearestNeighbors(n_neighbors=kx, p=2).fit(x)
     y2x = nnx.kneighbors_graph(y)
     x2x = nnx.kneighbors_graph(x)
@@ -81,26 +83,35 @@ def snn_matching(x: np.ndarray, y: np.ndarray, k: Optional[int] = 1):
     
     return matching_matrix.toarray()
 
-def eot_matching(x: np.ndarray, y: np.ndarray, max_iter = 1000, verbose: bool = True, use_sinkhorn_log = False):
+def eot_matching(x, y, max_iter = 1000, verbose: bool = False, use_sinkhorn_log = True):
     if use_sinkhorn_log: 
         method = "sinkhorn_log" 
-        reg = 0.01
+        reg = 0.05
     else: 
         method = "sinkhorn"
         reg = 0.05
-    p = ot.unif(x.shape[0])
-    q = ot.unif(y.shape[0])
-    M = ot.dist(x, y,  metric = "euclidean")
-    coupling, log= ot.sinkhorn(p, q, M, reg = reg, numItermax=max_iter, stopThr=1e-9, method = method, log=True, verbose=verbose)
-    coupling = coupling/coupling.sum(axis = 1, keepdims = True)
-
-    return coupling
+    if isinstance(x, np.ndarray): x = torch.from_numpy(x)
+    if isinstance(y, np.ndarray): y = torch.from_numpy(y)
+    p = ot.unif(x.shape[0], type_as = x).to("cuda")
+    q = ot.unif(y.shape[0], type_as = y).to("cuda")
+    M = ot.dist(x, y,  metric = "euclidean").to("cuda")
+    coupling, log= ot.sinkhorn(p, q, M, reg = reg, numItermax=max_iter, stopThr=1e-10, method = method, log=True, verbose=verbose)
+    while torch.isnan(coupling).any() and reg < 0.1:
+        reg += 0.01
+        coupling, log= ot.sinkhorn(p, q, M, reg = reg, numItermax=max_iter, stopThr=1e-10, method = method, log=True, verbose=verbose)
+    coupling = coupling/coupling.sum(dim = 1, keepdims = True)
+    return coupling.cpu().detach().numpy()
 
 def scot_matching(x: np.ndarray, y: np.ndarray):
     scot = SCOT(x, y)
-    _ = scot.align()
+    e = 0.01
+    _ = scot.align(metric = "correlation", e = e)
     coupling = scot.coupling
-    weights=np.sum(coupling, axis = 1)
+    while np.isnan(coupling).any() and e < 0.1:
+        e += 0.01
+        _ = scot.align(metric = "correlation", e = e)
+        coupling = scot.coupling
+    weights = np.sum(coupling, axis = 1)
     coupling = coupling / weights[:, None]
 
     return coupling

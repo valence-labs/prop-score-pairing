@@ -20,6 +20,7 @@ from sklearn.neighbors import kneighbors_graph
 # For pre-processing, normalization
 from sklearn.preprocessing import StandardScaler, normalize
 
+import torch
 
 class SCOT(object):
 	"""
@@ -118,8 +119,10 @@ class SCOT(object):
 		return self.Cx, self.Cy
 
 	def find_correspondences(self, e, verbose=False):
+		self.Cx, self.Cy, self.p, self.q = torch.from_numpy(self.Cx).to("cuda"), torch.from_numpy(self.Cy).to("cuda"),  torch.from_numpy(self.p).to("cuda"),  torch.from_numpy(self.q).to("cuda"),
 		self.coupling, log= ot.gromov.entropic_gromov_wasserstein(self.Cx, self.Cy, self.p, self.q, loss_fun='square_loss', epsilon=e, log=True, verbose=verbose, tol_rel=1e-08, tol_abs=1e-08)
-		self.gwdist=log['gw_dist']
+		self.coupling = self.coupling.cpu().detach().numpy()
+		self.gwdist=log['gw_dist'].cpu().detach().numpy()
 
 		# Check convergence:
 		if (np.isnan(self.coupling).any() or np.any(~self.coupling.any(axis=1)) or np.any(~self.coupling.any(axis=0)) or sum(sum(self.coupling)) < .95):
@@ -142,7 +145,7 @@ class SCOT(object):
 			self.y_aligned=np.matmul(np.transpose(self.coupling), self.X) / weights[:, None]
 		return self.X_aligned, self.y_aligned
 
-	def align(self, k=None, e=0.01, mode="connectivity", metric="correlation", verbose=True, normalize=True, norm="l2", XontoY=True, selfTune=False, init_marginals=True):
+	def align(self, k=None, e=0.05, mode="connectivity", metric="correlation", verbose=True, normalize=True, norm="l2", XontoY=True, selfTune=False, init_marginals=True):
 		if normalize:
 			self.normalize(norm=norm)
 		if init_marginals:
@@ -152,9 +155,9 @@ class SCOT(object):
 			X_aligned, y_aligned= self.unsupervised_scot()
 		else:
 			if k==None:
-				k=min((int(self.X.shape[0]*0.2), int(self.y.shape[0]*0.2),50))
+				k=max(1, min((int(self.X.shape[0]*0.2), int(self.y.shape[0]*0.2),50)))
 
-			self.construct_graph(k, mode= "connectivity", metric="correlation")
+			self.construct_graph(k, mode= "connectivity", metric=metric)
 			self.init_distances()
 			self.find_correspondences(e=e, verbose=verbose)
 

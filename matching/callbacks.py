@@ -16,7 +16,7 @@ MU = np.array([0.9906, 0.9902, 0.9922])
 SIG = np.array([0.008, 0.008, 0.008])
 
 class MatchingMetrics(Callback):
-    def __init__(self, run_scot = False, eval_inv_factor = 1, eval_max_samples = 500, eval_interval = 1):
+    def __init__(self, run_scot = False, eval_inv_factor = 1, eval_max_samples = 2500, eval_interval = 1):
         self.run_scot = run_scot
         self.eval_inv_factor = eval_inv_factor ## eval on len(data_group)//eval_inv_factor number of samples within each group, int >= 1
         self.eval_max_samples = eval_max_samples ## max number of samples for evaluation --- eot might be too slow otherwise 
@@ -48,7 +48,7 @@ class MatchingMetrics(Callback):
 
                 if np.isnan(scot_coupling).any(): continue ## skip everything if any nans 
 
-                trace = np.trace(scot_coupling)
+                trace = np.trace(scot_coupling)/len(subset)
                 pl_module.logger.experiment.summary[f"SCOT Trace {label}"] = trace
                 trace_avg += trace/len(np.unique(self.y))
                 x2_matched_scot = scot_coupling @ x2_
@@ -81,9 +81,9 @@ class MatchingMetrics(Callback):
                     n_samples = min(len(x1_)//self.eval_inv_factor, self.eval_max_samples)
                     x1_, x2_ = x1_[range(n_samples)], x2_[range(n_samples)]
                     match_x1, match_x2 = pl_module(x1_, x2_)
-                    match_x1, match_x2 = match_x1.cpu().detach().numpy(), match_x2.cpu().detach().numpy()
+                    match_x1_cpu, match_x2_cpu = match_x1.cpu().detach().numpy(), match_x2.cpu().detach().numpy()
                 start_snn = timer()
-                ps_nn_coupling = snn_matching(match_x1, match_x2)
+                ps_nn_coupling = snn_matching(match_x1_cpu, match_x2_cpu)
                 end_snn = timer()
                 print(f"kNN took {end_snn - start_snn} seconds on label {label} with {len(match_x1)} samples")
                 start_eot = timer()
@@ -92,12 +92,12 @@ class MatchingMetrics(Callback):
                 print(f"EOT took {end_eot - start_eot} seconds on label {label} with {len(match_x1)} samples")
 
                 if not np.isnan(ps_nn_coupling).any():  ## skip everything if any nans 
-                    ps_nn_trace = np.trace(ps_nn_coupling)
+                    ps_nn_trace = np.trace(ps_nn_coupling)/len(subset)
                     self.log(f"PS + kNN Trace {label}",ps_nn_trace)
                     trace_avg_ps_nn += ps_nn_trace/len(np.unique(self.y))
 
                 if not np.isnan(ps_eot_coupling).any():
-                    ps_eot_trace = np.trace(ps_eot_coupling)
+                    ps_eot_trace = np.trace(ps_eot_coupling)/len(subset)
                     self.log(f"PS + EOT Trace {label}", ps_eot_trace)
                     trace_avg_ps_eot += ps_eot_trace/len(np.unique(self.y))
 

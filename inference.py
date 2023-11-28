@@ -7,6 +7,7 @@ from matching.models.classifier import BallsClassifier, GEXADT_Classifier
 from matching.data_utils.datamodules import NoisyBallsDataModule, GEXADTDataModule, BallsDataModule
 import argparse
 import torch
+from torch.utils.data import DataLoader
 import pandas as pd
 from timeit import default_timer as timer
 import json
@@ -91,14 +92,25 @@ if __name__ == "__main__":
     print("data setup...")
     data.prepare_data()
     data.setup(stage = "test")
-    train_data, val_data, test_data = load_full_data(data.train_dataset), load_full_data(data.val_dataset), load_full_data(data.test_dataset)
+    test_data = DataLoader(data.test_dataset, batch_size = 256, shuffle = False)
     print("forward pass...")
-    match1, match2 =  model(test_data[0].to(device), test_data[1].to(device))
+    with torch.no_grad():
+        for (i, batch) in enumerate(test_data):
+            if i == 0:
+                match1, match2 =  model(batch[0].to(device), batch[1].to(device))
+                y = batch[2]
+                if isinstance(data, BallsDataModule): 
+                    z = batch[3]
+            else:
+                match1_, match2_ = model(batch[0].to(device), batch[1].to(device))
+                match1 = torch.cat((match1, match1_), 0)
+                match2 = torch.cat((match2, match2_), 0)
+                y = torch.cat((y, batch[2]), 0)
+                if isinstance(data, BallsDataModule): 
+                    z = torch.cat((z, batch[3]), 0)
     match1, match2 = match1.cpu(), match2.cpu()
-    y = test_data[2]
     print("starting evaluation...")
     if isinstance(data, BallsDataModule): 
-        z = test_data[3]
         outputs_EOT = compute_metrics(match1 = match1, match2 = match2, y = y, z = z, data = data, matching = eot_matching)
         outputs_kNN = compute_metrics(match1 = match1, match2 = match2, y = y, z = z, data = data, matching = snn_matching)
     if isinstance(data, GEXADTDataModule):
@@ -107,8 +119,6 @@ if __name__ == "__main__":
 
     outpath = "results/" + args.model + "_" + (args.checkpoint.split("/"))[-1] + args.dataset 
 
-    
     pd.DataFrame.from_dict(data = outputs_kNN, orient = "index").to_csv(outpath + "_kNN.csv", header = False)
     pd.DataFrame.from_dict(data = outputs_EOT, orient = "index").to_csv(outpath + "_EOT.csv", header = False)
 
-### setup with stage test

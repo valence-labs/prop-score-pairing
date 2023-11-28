@@ -8,6 +8,7 @@ from .base import BaseClassifier
 
 class BallsClassifier(BaseClassifier):
     def __init__(self, 
+                 n_classes: int = 12,
                 latent_dim: int = 128,
                 **kwargs):
         
@@ -15,11 +16,11 @@ class BallsClassifier(BaseClassifier):
 
         self.Encoder_1 = ImageEncoder(latent_dim)
         self.logits_1 = torch.nn.Sequential(
-            torch.nn.Linear(latent_dim, 12)
+            torch.nn.Linear(latent_dim, n_classes)
         )
         self.Encoder_2 = ImageEncoder(latent_dim)
         self.logits_2 = torch.nn.Sequential(
-            torch.nn.Linear(latent_dim, 12)
+            torch.nn.Linear(latent_dim, n_classes)
         )
         self.clf1 = torch.nn.Sequential(self.Encoder_1, self.logits_1)
         self.clf2 = torch.nn.Sequential(self.Encoder_2, self.logits_2)

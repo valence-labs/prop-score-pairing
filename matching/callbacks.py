@@ -10,8 +10,6 @@ import torch
 from tqdm import tqdm
 from timeit import default_timer as timer
 
-
-
 MU = np.array([0.9906, 0.9902, 0.9922])
 SIG = np.array([0.008, 0.008, 0.008])
 
@@ -88,6 +86,7 @@ class MatchingMetrics(Callback):
                 print(f"kNN took {end_snn - start_snn} seconds on label {label} with {len(match_x1)} samples")
                 start_eot = timer()
                 ps_eot_coupling = eot_matching(match_x1, match_x2, max_iter=1000, verbose = False, use_sinkhorn_log = True)
+                if isinstance(ps_eot_coupling, torch.Tensor): ps_eot_coupling = ps_eot_coupling.cpu().detach().numpy()
                 end_eot = timer()
                 print(f"EOT took {end_eot - start_eot} seconds on label {label} with {len(match_x1)} samples")
 

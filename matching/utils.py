@@ -11,6 +11,11 @@ sys.path.insert(1, "/mnt/ps/home/CORP/johnny.xi/sandbox/matching/scot/src")
 from scotv1 import *
 from evals import *
 
+def nullable_string(val):
+    if not val:
+        return None
+    return val
+
 def read_from_pickle(path):
     with open(path, 'rb') as file:
         data = pickle.load(file)
@@ -60,17 +65,18 @@ def hungarian_matching(prob1, prob2, subset = None, **kwargs):
 
 def snn_matching(x: np.ndarray, y: np.ndarray, k: Optional[int] = 1):
 
+    if isinstance(x, torch.Tensor): x = x.cpu().detach().numpy()
+    if isinstance(y, torch.Tensor): y = y.cpu().detach().numpy()
+
     x = x / np.linalg.norm(x, axis=1, keepdims=True)
     y = y / np.linalg.norm(y, axis=1, keepdims=True)
 
     ky = k or min(round(0.01 * y.shape[0]), 1000)
-    print(ky)
     nny = NearestNeighbors(n_neighbors=ky, p=2).fit(y)
     x2y = nny.kneighbors_graph(x)
     y2y = nny.kneighbors_graph(y)
 
     kx = k or min(round(0.01 * x.shape[0]), 1000)
-    print(kx)
     nnx = NearestNeighbors(n_neighbors=kx, p=2).fit(x)
     y2x = nnx.kneighbors_graph(y)
     x2x = nnx.kneighbors_graph(x)
@@ -100,7 +106,7 @@ def eot_matching(x, y, max_iter = 1000, verbose: bool = False, use_sinkhorn_log 
         reg += 0.01
         coupling, log= ot.sinkhorn(p, q, M, reg = reg, numItermax=max_iter, stopThr=1e-10, method = method, log=True, verbose=verbose)
     coupling = coupling/coupling.sum(dim = 1, keepdims = True)
-    return coupling.cpu().detach().numpy()
+    return coupling
 
 def scot_matching(x: np.ndarray, y: np.ndarray):
     scot = SCOT(x, y)

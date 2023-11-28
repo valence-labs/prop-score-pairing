@@ -41,8 +41,6 @@ if __name__ == "__main__":
         model = GEXADTVAEModule(lamb = args.lamb, lr = args.lr)
         data = GEXADTDataModule(batch_size = args.batch_size)
 
-    
-
     trainer = Trainer(accelerator = "gpu", 
                     max_epochs = args.max_epochs,
                     default_root_dir = logdir,

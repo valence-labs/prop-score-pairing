@@ -201,73 +201,75 @@ class GEXADTDataModule(LightningDataModule):
             data_gex.CT_id = data_gex.cell_type.cat.remove_unused_categories().cat.codes
 
         return self._train_val_split_df(data_adt), self._train_val_split_df(data_gex)
+    
+    def df_to_torch(self, df):
+         df.columns = df.columns.astype(str)
+         label_tensor = torch.tensor(df["CT_id"]).long()
+         dat = df.filter(regex="^[0-9]").astype("float32").values  ## the data columns starts with numeric and metadata is non-numeric
+         dat_tensor = torch.from_numpy(dat).float()
+
+         return dat_tensor, label_tensor
+
 
     def setup(self, stage: Optional[str] = None) -> None:
         # see https://pytorch-lightning.readthedocs.io/en/stable/data/datamodule.html#setup
         # this hook is called on every process when using DDP at the beginning of fit
         (train_df_adt, val_df_adt, test_df_adt), (train_df_gex, val_df_gex, test_df_gex)  = self.load_data()
         # unpack the prepared metadata
-        self.train_data_adt = train_df_adt
-        self.val_data_adt = val_df_adt
-        self.test_data_adt = test_df_adt
+        self.train_data_adt, self.train_labels = self.df_to_torch(train_df_adt)
+        self.val_data_adt, self.val_labels = self.df_to_torch(val_df_adt)
+        self.test_data_adt, self.test_labels = self.df_to_torch(test_df_adt)
 
-        self.train_data_gex = train_df_gex
-        self.val_data_gex = val_df_gex
-        self.test_data_gex = test_df_gex
+        self.train_data_gex, _ = self.df_to_torch(train_df_gex)
+        self.val_data_gex, _ = self.df_to_torch(val_df_gex)
+        self.test_data_gex, _ = self.df_to_torch(test_df_gex)
 
-        self.train_dataset = GEXADTDataset(self.train_data_adt, self.train_data_gex)
-        self.labels = torch.tensor(self.train_data_adt.CT_id).long()     
+        self.train_dataset = GEXADTDataset(self.train_data_adt, self.train_data_gex, self.train_labels)
+        self.val_dataset = GEXADTDataset(self.val_data_adt, self.val_data_gex, self.val_labels)
+        self.test_dataset = GEXADTDataset(self.test_data_adt, self.test_data_gex, self.test_labels)   
 
-        if stage == "test":
-            self.val_dataset = GEXADTDataset(self.val_data_adt, self.val_data_gex)
-            self.test_dataset = GEXADTDataset(self.test_data_adt, self.test_data_gex)   
+        self.labels = self.train_labels  
+
     
     def train_dataloader(self) -> DataLoader:
-        train_dataset = GEXADTDataset(
-            self.train_data_adt,
-            self.train_data_gex            
-            )
-        return DataLoader(train_dataset, batch_sampler = DomainSampler(self.train_data_adt, batch_size = self.batch_size), num_workers = 8)
-
+        print("train dataloader")
+        #return DataLoader(self.train_dataset, batch_sampler = DomainSampler(self.train_data_adt, batch_size = self.batch_size), num_workers = 8)
+        return DataLoader(self.train_dataset, batch_size = self.batch_size, shuffle = True, num_workers=8)
     def val_dataloader(self) -> DataLoader:
-        val_dataset = GEXADTDataset(
-            self.val_data_adt,
-            self.val_data_gex            
-            )
-        return DataLoader(val_dataset, batch_sampler = DomainSampler(self.val_data_adt, batch_size = self.batch_size), num_workers = 8)
-
+        #return DataLoader(self.val_dataset, batch_sampler = DomainSampler(self.val_data_adt, batch_size = self.batch_size), num_workers = 8)
+        return DataLoader(self.val_dataset, batch_size = self.batch_size, num_workers=8)
     def test_dataloader(self) -> DataLoader:
-        test_dataset = GEXADTDataset(
-            self.test_data_adt,
-            self.test_data_gex            
-            )
-        return DataLoader(test_dataset, batch_sampler = DomainSampler(self.test_data_adt, batch_size = self.batch_size), num_workers = 8)
-
+        #return DataLoader(self.test_dataset, batch_sampler = DomainSampler(self.test_data_adt, batch_size = self.batch_size), num_workers = 8)
+        return DataLoader(self.test_dataset, batch_size = self.batch_size, num_workers=8)
 class GEXADTDataset(Dataset):
-    def __init__(self, data_adt, data_gex):
+    def __init__(self, data_adt, data_gex, labels):
          super().__init__()
-         self.adt = data_adt
-         self.gex = data_gex
+         self.adt_tensor = data_adt
+         self.gex_tensor = data_gex
+         self.label_tensor = labels
 
     def __len__(self):
-         return len(self.adt)
-    
-    def process_row(self, row):
-        label = torch.tensor(row["CT_id"]).long()
-        dat = row.filter(regex="^[0-9]").astype("float32")  ## the data columns starts with numeric and metadata is non-numeric
-        dat_tensor = torch.from_numpy(dat.values).float() 
-
-        return dat_tensor, label
+         return len(self.adt_tensor)
 
     def __getitem__(self, index: int):
-        adt_row = self.adt.iloc[index]
-        gex_row = self.gex.iloc[index]
-        adt_dat, adt_lab = self.process_row(adt_row)
-        gex_dat, gex_lab = self.process_row(gex_row)
+        adt_row = self.adt_tensor[index,:]
+        gex_row = self.gex_tensor[index,:]
+        lab = self.label_tensor[index]
 
-        assert adt_lab == gex_lab, f"Label mismatch at index {index}, ensure modalities are matched!"
+        return adt_row, gex_row, lab ## x1, x2, y
 
-        return adt_dat, gex_dat, adt_lab ## x1, x2, y
+class GEXADTDataset_Double(GEXADTDataset):
+    def __init__(self, data_adt, data_gex_1, data_gex_2, labels):
+         super().__init__(data_adt, data_gex_1, labels)
+         self.gex_tensor_2 = data_gex_2
+
+    def __getitem__(self, index: int):
+        adt_row = self.adt_tensor[index,:]
+        gex_row_1 = self.gex_tensor[index,:]
+        gex_row_2 = self.gex_tensor_2[index,:]
+        lab = self.label_tensor[index]
+
+        return adt_row, gex_row_1, gex_row_2, lab ## x1, x2(1), x2(2), y
      
 
 

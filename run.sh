@@ -13,4 +13,5 @@ eval "$(pyenv virtualenv-init -)"
 pyenv activate matching
 
 python -W ignore::RuntimeWarning main.py --dataset=GEXADT --max_epochs=250 --batch_size=256 --eval_interval=1 --run_scot
+python -W ignore::RuntimeWarning main.py --dataset=GEXADT --max_epochs=250 --batch_size=256 --eval_interval=1 --run_scot
 

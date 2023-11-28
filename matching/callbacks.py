@@ -68,12 +68,12 @@ class MatchingMetrics(Callback):
         self.eval_max_samples = eval_max_samples ## max number of samples for evaluation --- eot might be too slow otherwise 
         self.eval_interval = eval_interval
     def setup(self, trainer, pl_module, stage):
-        self.val_loader = torch.utils.data.DataLoader(trainer.datamodule.val_dataset, batch_size = len(trainer.datamodule.val_dataset))
+        self.loader = torch.utils.data.DataLoader(trainer.datamodule.train_dataset, batch_size = len(trainer.datamodule.train_dataset))
         if isinstance(trainer.datamodule, BallsDataModule):
-            self.x1, self.x2, self.y, self.z = next(iter(self.val_loader))  ## only have ground truth z for balls dataset
+            self.x1, self.x2, self.y, self.z = next(iter(self.loader))  ## only have ground truth z for balls dataset
             self.z, self.y = self.z.cpu().detach().numpy(), self.y.cpu().detach().numpy()
         else:
-            self.x1, self.x2, self.y = next(iter(self.val_loader))
+            self.x1, self.x2, self.y = next(iter(self.loader))
             self.y = self.y.cpu().detach().numpy()
             self.z = None
         if self.run_scot:

@@ -12,6 +12,5 @@ eval "$(pyenv virtualenv-init -)"
 
 pyenv activate matching
 
-python3 -W ignore probing.py --max_epochs=250 --unbiased --lr=0.00002
-python3 -W ignore probing.py --max_epochs=250 --lr=0.00002
+python -W ignore::RuntimeWarning main.py --dataset=GEXADT --max_epochs=250 --batch_size=256 --eval_interval=1 --run_scot
 

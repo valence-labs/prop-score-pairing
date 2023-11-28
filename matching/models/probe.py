@@ -106,18 +106,19 @@ class MatchingProbe(LightningModule):
         self.log("Val Loss", loss, on_epoch = True)
         self.log("Val R2", r2, on_epoch = True)
 
-        with torch.no_grad():
-            if self.embedding == "random":
-                coupling = torch.full((x2.shape[0], x2.shape[0]), torch.tensor(1/x2.shape[0]), device = "cuda")
-            elif isinstance(self.embedding, LightningModule):
-                match1, match2 = self.embedding(x1, x2)
-                coupling = eot_matching(match1, match2)
+        if self.unbiased == True:
+            with torch.no_grad():
+                if self.embedding == "random":
+                    coupling = torch.full((x2.shape[0], x2.shape[0]), torch.tensor(1/x2.shape[0]), device = "cuda")
+                elif isinstance(self.embedding, LightningModule):
+                    match1, match2 = self.embedding(x1, x2)
+                    coupling = eot_matching(match1, match2)
 
-            pred = self.probe(x1)
-            pred_projected = torch.t(coupling) @ pred
-            loss_projected = self.loss(pred_projected, x2)
+                pred = self.probe(x1)
+                pred_projected = torch.t(coupling) @ pred
+                loss_projected = self.loss(pred_projected, x2)
 
-            self.log("Val Loss Projected", loss_projected)
+                self.log("Val Loss Projected", loss_projected)
 
     def on_validation_epoch_end(self): 
         pass
@@ -161,12 +162,10 @@ class MatchingProbe(LightningModule):
                 subset = y == label
                 x1_, x2_ = x1[subset].clone(), x2[subset].clone()
                 #x2_ = x2_[torch.randperm(x2_.shape[0])]
-                x1_ = x1_[torch.randperm(x2_.shape[0])]
+                x1_ = x1_[torch.randperm(x2_.shape[0])]  ## shuffle to avoid pathologies 
                 if isinstance(self.embedding, LightningModule):
                     match1, match2 = self.embedding(x1_, x2_)
                     coupling = eot_matching(match1, match2)
-                    # coupling = snn_matching(match1, match2)
-                    # coupling = torch.from_numpy(coupling).to("cuda")
                 if self.embedding == "random":
                     coupling = torch.full((x2_.shape[0], x2_.shape[0]), torch.tensor(1/x2_.shape[0]), device = "cuda")
                 #idx = torch.multinomial(coupling, num_samples = 1)

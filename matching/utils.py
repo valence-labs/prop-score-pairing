@@ -10,6 +10,8 @@ import sys
 sys.path.insert(1, "/mnt/ps/home/CORP/johnny.xi/sandbox/matching/scot/src")
 from scotv1 import *
 from evals import *
+from timeit import default_timer as timer
+
 
 def nullable_string(val):
     if not val:
@@ -145,3 +147,4 @@ def convert_to_labels(y: np.ndarray) -> np.ndarray:
 
 def compute_avg_FOSCTTM(x: np.ndarray, y: np.ndarray) -> float:
     return np.array(calc_domainAveraged_FOSCTTM(x, y)).mean()
+

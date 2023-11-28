@@ -12,6 +12,7 @@ def parse_arguments():
     parser.add_argument("--lr", metavar = "LEARNING_RATE", type = float, default = 0.0001)
     parser.add_argument("--dataset", metavar = "BALLS OR GEXADT", type = str, default = "GEXADT")
     parser.add_argument("--eval_interval", metavar = "INTERVAL OF MATCHING METRICS", type = int, default = 10)
+    parser.add_argument("--run_scot", action = "store_true")
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -42,9 +43,8 @@ if __name__ == "__main__":
                     devices = 1,
                     log_every_n_steps = 1,
                     num_sanity_val_steps=2,
-                    callbacks = [MatchingMetrics(run_scot=False, eval_interval = args.eval_interval), checkpoint_callback], 
+                    callbacks = [MatchingMetrics(run_scot=args.run_scot, eval_interval = args.eval_interval), checkpoint_callback], 
                     logger = wandb_logger,
                     )
     
-
     trainer.fit(model = model, datamodule = data)

@@ -19,7 +19,6 @@ def parse_arguments():
     parser.add_argument("--batch_size", metavar = "BATCH_SIZE", type = int, default = 500)
     parser.add_argument("--lr", metavar = "LEARNING_RATE", type = float, default = 0.0001)
     parser.add_argument("--unbiased", action='store_true', default=False)
-    parser.add_argument("")
     return parser.parse_args()
 
 if __name__ == "__main__":

@@ -49,18 +49,15 @@ class IV_MSELoss(torch.nn.Module):
 
 class MatchingProbe(LightningModule):
     def __init__(self,
-                 embedding = None, ## pre-trained embedding
+                 embedding = None, ## pre-trained embedding, or string "random" or "gt" for random matching or ground truth matching
                  lr: float = 0.001, 
                  wd: float = 0.0005,
-                 match: str = "PS", ## "PS" or "None" or "Random",
                  unbiased: bool = False
                  ):
         super().__init__()
 
         self.lr = lr
         self.wd = wd
-        assert match in ["PS", "None", "Random"]
-        self.match = match
         self.embedding = embedding
         self.unbiased = unbiased
         
@@ -68,8 +65,10 @@ class MatchingProbe(LightningModule):
             self.loss = IV_MSELoss()
         else:
             self.loss = torch.nn.MSELoss()
-        if embedding is not None:
+        if isinstance(self.embedding, LightningModule):
             self.embedding.freeze()
+        else:
+            self.embedding = str.lower(self.embedding)
 
     def forward(self, x):
         ## x1, x2 are different views of the scene
@@ -108,13 +107,12 @@ class MatchingProbe(LightningModule):
         self.log("Val R2", r2, on_epoch = True)
 
         with torch.no_grad():
-            if self.embedding is None:
+            if self.embedding == "random":
                 coupling = torch.full((x2.shape[0], x2.shape[0]), torch.tensor(1/x2.shape[0]), device = "cuda")
-            else:
+            elif isinstance(self.embedding, LightningModule):
                 match1, match2 = self.embedding(x1, x2)
                 coupling = eot_matching(match1, match2)
 
-            
             pred = self.probe(x1)
             pred_projected = torch.t(coupling) @ pred
             loss_projected = self.loss(pred_projected, x2)
@@ -145,45 +143,45 @@ class MatchingProbe(LightningModule):
         
         ## match the data before training
         
-        if self.match == "None":
+        if self.embedding == "gt":
             if self.unbiased:
                 self.trainer.datamodule.train_dataset = GEXADTDataset_Double(self.trainer.datamodule.train_data_adt, 
                                                                       self.trainer.datamodule.train_data_adt.clone(),
                                                                       self.trainer.datamodule.train_data_gex,
                                                                       self.trainer.datamodule.train_labels)
-
-        if self.match in ["PS", "Random"]:
-            with torch.no_grad():
-                x1 = self.trainer.datamodule.train_data_adt.to("cuda")
-                x2 = self.trainer.datamodule.train_data_gex.to("cuda")
-                if self.unbiased: x1_clone = torch.zeros_like(x1).to("cuda")
-                y = self.trainer.datamodule.train_labels.to("cuda")
-                for label in torch.unique(y):
-                    subset = y == label
-                    x1_, x2_ = x1[subset].clone(), x2[subset].clone()
-                    #x2_ = x2_[torch.randperm(x2_.shape[0])]
-                    x1_ = x1_[torch.randperm(x2_.shape[0])]
-                    if self.match == "PS":
-                        match1, match2 = self.embedding(x1_, x2_)
-                        coupling = eot_matching(match1, match2)
-                        # coupling = snn_matching(match1, match2)
-                        # coupling = torch.from_numpy(coupling).to("cuda")
-                    if self.match == "Random":
-                        coupling = torch.full((x2_.shape[0], x2_.shape[0]), torch.tensor(1/x2_.shape[0]), device = "cuda")
-                    #idx = torch.multinomial(coupling, num_samples = 1)
-                    idx = torch.multinomial(torch.t(coupling), num_samples = 1)
-                    x1_clone_1 = (x1_.clone())[torch.flatten(idx)].view(x1_.size())
+            return None
+        
+        
+        with torch.no_grad():
+            x1 = self.trainer.datamodule.train_data_adt.to("cuda")
+            x2 = self.trainer.datamodule.train_data_gex.to("cuda")
+            if self.unbiased: x1_clone = torch.zeros_like(x1).to("cuda")
+            y = self.trainer.datamodule.train_labels.to("cuda")
+            for label in torch.unique(y):
+                subset = y == label
+                x1_, x2_ = x1[subset].clone(), x2[subset].clone()
+                #x2_ = x2_[torch.randperm(x2_.shape[0])]
+                x1_ = x1_[torch.randperm(x2_.shape[0])]
+                if isinstance(self.embedding, LightningModule):
+                    match1, match2 = self.embedding(x1_, x2_)
+                    coupling = eot_matching(match1, match2)
+                    # coupling = snn_matching(match1, match2)
+                    # coupling = torch.from_numpy(coupling).to("cuda")
+                if self.embedding == "random":
+                    coupling = torch.full((x2_.shape[0], x2_.shape[0]), torch.tensor(1/x2_.shape[0]), device = "cuda")
+                #idx = torch.multinomial(coupling, num_samples = 1)
+                idx = torch.multinomial(torch.t(coupling), num_samples = 1)  ## sampling x1 instead of x2 with torch.t 
+                x1_clone_1 = (x1_.clone())[torch.flatten(idx)].view(x1_.size())
+                x1[subset] = x1_clone_1
+                if self.unbiased: 
                     idx = torch.multinomial(torch.t(coupling), num_samples = 1)
                     x1_clone_2 = (x1_.clone())[torch.flatten(idx)].view(x1_.size())
-                    #x2_ = coupling @ x2_
-                    #x2[subset] = x2_
-                    x1[subset] = x1_clone_1
-                    if self.unbiased: x1_clone[subset] = x1_clone_2
+                    x1_clone[subset] = x1_clone_2
 
-            if self.unbiased:
-                self.trainer.datamodule.train_dataset = GEXADTDataset_Double(x1.to("cpu"), x1_clone.to("cpu"), x2.to("cpu"), y.to("cpu"))      
-            else:
-                self.trainer.datamodule.train_dataset = GEXADTDataset(x1.to("cpu"), x2.to("cpu"), y.to("cpu"))
+        if self.unbiased:
+            self.trainer.datamodule.train_dataset = GEXADTDataset_Double(x1.to("cpu"), x1_clone.to("cpu"), x2.to("cpu"), y.to("cpu"))      
+        else:
+            self.trainer.datamodule.train_dataset = GEXADTDataset(x1.to("cpu"), x2.to("cpu"), y.to("cpu"))
         
     def on_train_epoch_end(self):
         pass

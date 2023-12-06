@@ -1,7 +1,7 @@
 import pickle
 import torch
 import numpy as np
-import pytorch-lightning as pl
+import pytorch_lightning as pl
 import ot
 from typing import Callable, Optional, Union, Any, Tuple
 from sklearn.neighbors import NearestNeighbors

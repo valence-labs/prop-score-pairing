@@ -8,7 +8,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description = "Matching on balls or ADT/GEX")
-    parser.add_argument("--max_epochs", metavar = "MAX_EPOCHS", type = int, default = 50)
+    parser.add_argument("--max_epochs", metavar = "MAX_EPOCHS", type = int, default = 2)
     parser.add_argument("--batch_size", metavar = "BATCH_SIZE", type = int, default = 256)
     parser.add_argument("--lr", metavar = "LEARNING_RATE", type = float, default = 0.0001)
     parser.add_argument("--dataset", metavar = "BALLS OR GEXADT", type = str, default = "GEXADT")

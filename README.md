@@ -13,10 +13,10 @@ The command takes the following possible parameters:
 - `--lr`
 - `--dataset`: One of "GEXADT", for CITE-seq data, or "BALLS", for the synthetic interventional balls data.
 - `--model`: One of "CLASSIFIER" or "VAE".
-- `--eval_interval`: How often to evaluate the model by computing matching metrics. Default is set to evaluate at every epoch (`= 1`). If the matching metrics are too slow, you may want to make this larger.
+- `--eval_interval`: How often to evaluate the model by computing matching metrics on the full validation set. Default is set to evaluate at every epoch (`= 1`). If the matching metrics are too slow, you may want to make this larger.
 - `--run_scot`: Boolean flag for whether to run Gromov-Wasserstein OT (SCOT) and store its metrics prior to training. This can be slow for larger datasets!
 
-By default, `main.py` will train a classifier on the CITE-seq data for 50 epochs, with batch size 256, and with learning rate 0.0001.  
+By default, `main.py` will train a classifier on the CITE-seq data for 2 epochs, with batch size 256, and with learning rate 0.0001, which should be used for testing purposes.  
 
 There are also parameters related to the VAE loss from:
 Yang, Karren Dai, et al. "Multi-domain translation between single-cell imaging and sequencing data using autoencoders." Nature communications 12.1 (2021): 31.
@@ -30,7 +30,7 @@ Yang, Karren Dai, et al. "Multi-domain translation between single-cell imaging a
 The training script will store a checkpoint with the best validation loss at `results/checkpoints/*.ckpt`. With this checkpoint, we can evaluate final matching metrics on the test set with the following example script:  
 
 ```
-python3 inference.py --checkpoint=results/checkpoints/PS-epoch=06-full_val_loss=0.63.ckpt --dataset=GEXADT
+python3 inference.py --checkpoint=results/checkpoints/CLASSIFIER-epoch=00-full_val_loss=0.81.ckpt
 ```
 
 The result will be stored under `results/`, in a CSV file.
@@ -41,7 +41,7 @@ The command takes the following parameters:
 - `--dataset`
 - `--run_scot`
 
-Besides `--checkpoint`, which is self-explanatory, the remaining parameters are identical to `main.py`.
+Besides `--checkpoint`, which is self-explanatory, the remaining parameters are identical to `main.py`. Again, by default it will assume that we are doing inference on the CITE-seq data. 
 
 ### Probing
 
@@ -61,3 +61,4 @@ This command takes the following parameters, note the training parameters are fo
 - `--lr`
 - `--unbiased`: Boolean flag for whether to use the unbiased 2-stage least squares loss (this involves sampling twice from the source modality). 
 
+By default, `probing.py` will run for 2 epochs with batch size 500, and learning rate 0.0001, without the unbiased loss. The default should be used for testing purposes. 

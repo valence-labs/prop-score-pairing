@@ -19,8 +19,8 @@ SIG = np.array([0.008, 0.008, 0.008])
 def compute_metrics(match1: torch.Tensor, 
                     match2: torch.Tensor, 
                     y: torch.Tensor, 
-                    matching: Callable[[torch.Tensor, torch.Tensor], torch.Tensor], 
                     data: Union[BallsDataModule, GEXADTDataModule], 
+                    matching: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None, 
                     z: Optional[torch.Tensor] = None, 
                     embedding: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None) -> Dict[str, Any]:
     traces = []
@@ -42,7 +42,7 @@ def compute_metrics(match1: torch.Tensor,
         print(f"{matching} took {end - start} seconds on label {label} with {len(x1_)} samples")
         if torch.isnan(coupling).any(): continue ## skip everything if any nans 
 
-        trace = torch.trace(coupling)/len(x1_)
+        trace = float(torch.trace(coupling)/len(x1_))
         traces.append(trace)
         outputs[f"Trace {label}"] = trace
         #x2_matched = coupling @ x2_  ## projection
@@ -56,17 +56,17 @@ def compute_metrics(match1: torch.Tensor,
         if isinstance(data, BallsDataModule):
             z_subset = z[subset]
             mse = latent_matching_score(coupling, z_subset)
-            random_mse = float(((np.random.permutation(z_subset) - z_subset)**2).mean())
+            random_mse = float(((z_subset[torch.randperm(z_subset.size()[0])] - z_subset)**2).mean())
             mses.append(mse)
             random_mses.append(random_mse)
             outputs[f"MSE {label}"] = float(mse)
             outputs[f"Random MSE {label}"] = float(random_mse)
     
-    outputs["Average Trace"] = np.mean(traces)
-    if isinstance(data, GEXADTDataModule): outputs["Average FOSCTTM"] = np.mean(foscttms)
+    outputs["Average Trace"] = float(np.mean(traces))
+    if isinstance(data, GEXADTDataModule): outputs["Average FOSCTTM"] = float(np.mean(foscttms))
     if isinstance(data, BallsDataModule):
-        outputs["Average MSE"] = np.mean(mses)
-        outputs["Average Random MSE"] = np.mean(random_mses)
+        outputs["Average MSE"] = float(np.mean(mses))
+        outputs["Average Random MSE"] = float(np.mean(random_mses))
 
     return outputs
 
@@ -88,14 +88,14 @@ class MatchingMetrics(Callback):
               pl_module: pl.LightningModule, 
               stage: Optional[str]) -> None:
         
-        self.loader = torch.utils.data.DataLoader(trainer.datamodule.train_dataset, batch_size = len(trainer.datamodule.train_dataset))
+        self.loader = torch.utils.data.DataLoader(trainer.datamodule.val_dataset, batch_size = len(trainer.datamodule.val_dataset))
         if isinstance(trainer.datamodule, BallsDataModule):
             self.x1, self.x2, self.y, self.z = next(iter(self.loader))  ## only have ground truth z for balls dataset
         elif isinstance(trainer.datamodule, GEXADTDataModule):
             self.x1, self.x2, self.y = next(iter(self.loader))
             self.z = None
         if self.run_scot:
-            outputs_SCOT = compute_metrics(self.x1, self.x2, self.y, scot_matching, trainer.datamodule, self.z)
+            outputs_SCOT = compute_metrics(match1 = self.x1, match2 = self.x2, y = self.y, matching = scot_matching, data = trainer.datamodule, z = self.z)
             for metric in outputs_SCOT:
                     if str(metric).split()[0] == "Average":
                         pl_module.logger.experiment.summary["SCOT" + metric] = outputs_SCOT[metric]
@@ -106,8 +106,8 @@ class MatchingMetrics(Callback):
         ## compute PS metrics
         if (trainer.current_epoch + 1) % self.eval_interval == 0:
             with torch.no_grad():
-                outputs_EOT = compute_metrics(self.x1, self.x2, self.y, eot_matching, trainer.datamodule, self.z, pl_module.forward)
-                outputs_SNN = compute_metrics(self.x1, self.x2, self.y, snn_matching, trainer.datamodule, self.z, pl_module.forward)
+                outputs_EOT = compute_metrics(match1 = self.x1, match2 = self.x2, y = self.y, matching = eot_matching, data = trainer.datamodule, z = self.z, embedding = pl_module.forward)
+                outputs_SNN = compute_metrics(match1 = self.x1, match2 = self.x2, y = self.y, matching = snn_matching, data = trainer.datamodule, z = self.z, embedding = pl_module.forward)
                 for metric in outputs_EOT:
                     if str(metric).split()[0] == "Average":
                         pl_module.log("EOT" + metric, outputs_EOT[metric])

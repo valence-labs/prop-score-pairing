@@ -4,6 +4,7 @@ from matching.models.vae import ImageVAEModule, GEXADTVAEModule
 from matching.models.classifier import BallsClassifier, GEXADT_Classifier
 from matching.data_utils.datamodules import NoisyBallsDataModule, GEXADTDataModule, BallsDataModule
 import argparse
+import os
 import torch
 from torch.utils.data import DataLoader
 import pandas as pd
@@ -16,11 +17,6 @@ def parse_arguments():
     parser.add_argument("--dataset", metavar = "BALLS OR GEXADT", type = str, default = "GEXADT")
     parser.add_argument("--run_scot", action = "store_true")
     return parser.parse_args()
-
-def load_full_data(dataset):
-    """should be a torch dataset"""
-    loader = torch.utils.data.DataLoader(dataset, batch_size = len(dataset))
-    return next(iter(loader))
 
 if __name__ == "__main__":
 
@@ -72,3 +68,5 @@ if __name__ == "__main__":
     pd.DataFrame.from_dict(data = outputs_kNN, orient = "index").to_csv(outpath + "_kNN.csv", header = False)
     pd.DataFrame.from_dict(data = outputs_EOT, orient = "index").to_csv(outpath + "_EOT.csv", header = False)
     if args.run_scot: pd.DataFrame.from_dict(data = outputs_SCOT, orient = "index").to_csv(outpath + "_SCOT.csv", header = False)
+
+    print(f"Results saved under {os.getcwd() + '/' + outpath}.")

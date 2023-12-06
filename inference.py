@@ -1,4 +1,4 @@
-from matching.utils import snn_matching, eot_matching, scot_matching
+from matching.utils import snn_matching, eot_matching, scot_matching, load_from_checkpoint_
 from matching.callbacks import compute_metrics
 from matching.models.vae import ImageVAEModule, GEXADTVAEModule
 from matching.models.classifier import BallsClassifier, GEXADT_Classifier
@@ -14,8 +14,6 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description = "Matching on balls or ADT/GEX")
     parser.add_argument("--checkpoint", metavar = "CHECKPOINT PATH", type = str)
     parser.add_argument("--dataset", metavar = "BALLS OR GEXADT", type = str, default = "GEXADT")
-    parser.add_argument("--model", metavar = "VAE or CLASSIFIER", type = str, default = "CLASSIFIER")
-    parser.add_argument("--gpu", action = "store_true")
     parser.add_argument("--run_scot", action = "store_true")
     return parser.parse_args()
 
@@ -30,23 +28,15 @@ if __name__ == "__main__":
 
     print(args)
 
-    device = "cuda" if args.gpu else "cpu"
+    device = "cuda" if torch.cuda.is_available() else "cpu"
 
     if args.dataset == "BALLS":
         data = NoisyBallsDataModule()
-        print("loading model...")
-        if args.model == "CLASSIFIER":
-            model = BallsClassifier.load_from_checkpoint(args.checkpoint, map_location=torch.device(device))
-        if args.model == "VAE":
-            model = ImageVAEModule.load_from_checkpoint(args.checkpoint, map_location=torch.device(device))
     if args.dataset == "GEXADT":
         data = GEXADTDataModule()
-        print("loading model...")
-        if args.model == "CLASSIFIER":
-            model = GEXADT_Classifier.load_from_checkpoint(args.checkpoint, map_location=torch.device(device))
-        if args.model == "VAE":
-            model = GEXADTVAEModule.load_from_checkpoint(args.checkpoint, map_location=torch.device(device))
     
+    print("loading model...")
+    model = load_from_checkpoint_(args.checkpoint, args.dataset, device)
     model.eval()
     print("data setup...")
     data.prepare_data()
@@ -72,13 +62,12 @@ if __name__ == "__main__":
                 y = torch.cat((y, batch[2]), 0)
                 if isinstance(data, BallsDataModule): 
                     z = torch.cat((z, batch[3]), 0)
-    match1, match2 = match1.cpu(), match2.cpu()
     print("starting evaluation...")
     if args.run_scot: outputs_SCOT = compute_metrics(match1 = x1, match2 = x2, y = y, z = z, data = data, matching = scot_matching)
     outputs_EOT = compute_metrics(match1 = match1, match2 = match2, y = y, z = z, data = data, matching = eot_matching)
     outputs_kNN = compute_metrics(match1 = match1, match2 = match2, y = y, z = z, data = data, matching = snn_matching)
 
-    outpath = "results/" + args.model + "_" + (args.checkpoint.split("/"))[-1] + args.dataset 
+    outpath = "results/" + str(model.__class__.__name__) + "_" + (args.checkpoint.split("/"))[-1] + args.dataset 
 
     pd.DataFrame.from_dict(data = outputs_kNN, orient = "index").to_csv(outpath + "_kNN.csv", header = False)
     pd.DataFrame.from_dict(data = outputs_EOT, orient = "index").to_csv(outpath + "_EOT.csv", header = False)

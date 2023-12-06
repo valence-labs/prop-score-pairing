@@ -1,7 +1,7 @@
 import sys
 import os
 import numpy as np
-from matching.utils import nullable_string
+from matching.utils import nullable_string, load_from_checkpoint_
 from matching.models.base import ImageVAEModule, GEXADTVAEModule
 from matching.models.classifier import BallsClassifier, GEXADT_Classifier
 from matching.data_utils.datamodules import NoisyBallsDataModule, GEXADTDataModule, BallsDataModule
@@ -13,7 +13,7 @@ from pytorch_lightning import loggers, Trainer
 
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(description = "Matching on balls or ADT/GEX")
+    parser = argparse.ArgumentParser(description = "Probing Experiment")
     parser.add_argument("--checkpoint", metavar = "Checkpoint, or Random, or GT", type = nullable_string)
     parser.add_argument("--max_epochs", metavar = "MAX_EPOCHS", type = int, default = 50)
     parser.add_argument("--batch_size", metavar = "BATCH_SIZE", type = int, default = 500)
@@ -37,7 +37,7 @@ if __name__ == "__main__":
     if args.checkpoint in ["Random", "GT"]:
         embedding = args.checkpoint
     else:
-        embedding = GEXADT_Classifier.load_from_checkpoint(args.checkpoint, map_location=torch.device("cuda"))
+        embedding = load_from_checkpoint_(args.checkpoint, "GEXADT")
 
     probe = MatchingProbe(embedding = embedding, lr = args.lr, unbiased = args.unbiased)
 

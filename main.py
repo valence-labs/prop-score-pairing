@@ -14,7 +14,7 @@ def parse_arguments():
     parser.add_argument("--dataset", metavar = "BALLS OR GEXADT", type = str, default = "GEXADT")
     parser.add_argument("--eval_interval", metavar = "INTERVAL OF MATCHING METRICS", type = int, default = 1)
     parser.add_argument("--run_scot", action = "store_true")
-    parser.add_argument("--model", metavar = "PS OR VAE", type = str, default = "PS")
+    parser.add_argument("--model", metavar = "CLASSIFIER OR VAE", type = str, default = "CLASSIFIER")
     parser.add_argument("--lamb", metavar = "WEIGHT ON KL TERM", type = float, default = 0.0000000001)
     parser.add_argument("--alpha", metavar = "WEIGHT ON MODALITY CLASSIFIER", type = float, default = 1)
     parser.add_argument("--beta", metavar = "WEIGHT ON LABEL CLASSIFIER", type = float, default = 0.1)
@@ -24,7 +24,7 @@ if __name__ == "__main__":
 
     args = parse_arguments()
 
-    assert args.model in ["PS", "VAE"]
+    assert args.model in ["CLASSIFIER", "VAE"]
 
     logdir = "checkpoints/" + "balls/" + args.model + "/"
     wandb_logger = loggers.WandbLogger(save_dir = logdir, project = "Matching-Experiments")
@@ -38,13 +38,13 @@ if __name__ == "__main__":
     )
 
     if args.dataset == "BALLS":
-        if args.model == "PS":
+        if args.model == "CLASSIFIER":
             model = BallsClassifier(latent_dim = 128, lr = args.lr)
         elif args.model == "VAE":
             model = ImageVAEModule(alpha = args.alpha, beta = args.beta, lamb = args.lamb, lr = args.lr)
         data = NoisyBallsDataModule(batch_size = args.batch_size)
     if args.dataset == "GEXADT":
-        if args.model == "PS":
+        if args.model == "CLASSIFIER":
             model = GEXADT_Classifier(n_classes = 45, lr = args.lr)
         elif args.model == "VAE":
             model = GEXADTVAEModule(alpha = args.alpha, beta = args.beta, lamb = args.lamb, lr = args.lr)

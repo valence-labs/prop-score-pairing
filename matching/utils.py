@@ -1,12 +1,14 @@
 import pickle
 import torch
 import numpy as np
-from scipy.spatial.distance import cdist
-from scipy.optimize import linear_sum_assignment
+import pytorch-lightning as pl
 import ot
-from typing import Optional
+from typing import Callable, Optional, Union, Any, Tuple
 from sklearn.neighbors import NearestNeighbors
 import sys
+from .models.classifier import BallsClassifier, GEXADT_Classifier
+from .models.vae import ImageVAEModule, GEXADTVAEModule
+
 sys.path.insert(1, "/mnt/ps/home/CORP/johnny.xi/sandbox/matching/scot/src")
 from scotv1 import *
 from evals import *
@@ -18,54 +20,18 @@ def nullable_string(val):
         return None
     return val
 
-def read_from_pickle(path):
+def read_from_pickle(path: str) -> Any:
     with open(path, 'rb') as file:
         data = pickle.load(file)
     return data
-
-def label_and_write(predictions, counts, filename):
-    """
-    Function to use gene_counts to label the predictions and write to pickle file
-    """
-    pred_dict = {gene:pred_ for (gene, pred_) in zip(counts, predictions)}
-    filename = filename + "embeddings.pkl"
-
-    with open(filename, 'wb') as f:
-        pickle.dump(pred_dict, f)
 
 def write_to_pickle(object, path):
     with open(path, 'wb') as f:
         pickle.dump(object, f)
 
-def cost_mx_from_probs(prob1, prob2, p = 5, transform_logit = True):
-    """
-    Compute the cost matrix between two classification probability/logit outputs, using a p-norm
-    """
-    ### prob1, prob2 are (n x 128) dimensional probabilities 
-    prob1, prob2 = prob1.float(), prob2.float()
-    if transform_logit:
-        prob1, prob2 = torch.nn.functional.log_softmax(prob1, dim = 1), torch.nn.functional.log_softmax(prob2, dim = 1)
-    prob1, prob2 = prob1.detach().numpy(), prob2.detach().numpy()
-    #dist = np.squeeze(cdist(prob1, prob2, metric = "cosine"))
-    dist = np.squeeze(cdist(prob1, prob2, metric = "minkowski", p = p))
-    return dist
-
-def hungarian_matching(prob1, prob2, subset = None, **kwargs):
-    """
-    Compute the optimal matching based on minimizing overall pairwise distances, using the Hungarian algorithm.
-    """
-    if subset is None:
-        subset = [i for i in range(prob1.shape[1])]
-    prob1, prob2 = prob1[:, subset], prob2[:, subset]
-    cost = cost_mx_from_probs(prob1, prob2, **kwargs)
-    #cost += np.random.randn(*cost.shape)*0.0001 ## break ties
-    row_reorder, col_reorder = linear_sum_assignment(cost)
-    conf_matrix = cost**(-1)
-    conf_matrix = conf_matrix/conf_matrix.sum(axis=0)
-
-    return col_reorder, conf_matrix
-
-def snn_matching(x: np.ndarray, y: np.ndarray, k: Optional[int] = 1):
+def snn_matching(x: Union[torch.Tensor, np.ndarray], 
+                 y: Union[torch.Tensor, np.ndarray], 
+                 k: Optional[int] = 1) -> torch.Tensor:
 
     if isinstance(x, torch.Tensor): x = x.cpu().detach().numpy()
     if isinstance(y, torch.Tensor): y = y.cpu().detach().numpy()
@@ -89,9 +55,13 @@ def snn_matching(x: np.ndarray, y: np.ndarray, k: Optional[int] = 1):
     jaccard.data = jaccard.data / (2 * kx + 2 * ky - jaccard.data)
     matching_matrix = jaccard.multiply(1 / jaccard.sum(axis=1))
     
-    return matching_matrix.toarray()
+    return torch.from_numpy(matching_matrix.toarray())
 
-def eot_matching(x, y, max_iter = 1000, verbose: bool = False, use_sinkhorn_log = True):
+def eot_matching(x: Union[torch.Tensor, np.ndarray], 
+                 y: Union[torch.Tensor, np.ndarray], 
+                 max_iter: int = 1000, 
+                 verbose: bool = False, 
+                 use_sinkhorn_log: bool = True) -> torch.Tensor:
     if use_sinkhorn_log: 
         method = "sinkhorn_log" 
         reg = 0.05
@@ -110,7 +80,11 @@ def eot_matching(x, y, max_iter = 1000, verbose: bool = False, use_sinkhorn_log 
     coupling = coupling/coupling.sum(dim = 1, keepdims = True)
     return coupling
 
-def scot_matching(x: np.ndarray, y: np.ndarray):
+def scot_matching(x: Union[torch.Tensor, np.ndarray], 
+                  y: Union[torch.Tensor, np.ndarray]) -> torch.Tensor:
+    if isinstance(x, torch.Tensor): x = x.cpu().detach().numpy()
+    if isinstance(y, torch.Tensor): y = y.cpu().detach().numpy()
+
     scot = SCOT(x, y)
     e = 0.01
     _ = scot.align(metric = "correlation", e = e)
@@ -122,29 +96,45 @@ def scot_matching(x: np.ndarray, y: np.ndarray):
     weights = np.sum(coupling, axis = 1)
     coupling = coupling / weights[:, None]
 
-    return coupling
+    return torch.from_numpy(coupling)
 
-def compute_class_weights(y: np.ndarray) -> np.ndarray:
-    assert len(y.shape) == 1,f"Label should be 1-d but got {y.shape}"
-    _, counts = np.unique(y, return_counts = True)
-    class_probabilities = counts/len(y)
-    n_classes = len(class_probabilities)
-    return n_classes, 1 / (n_classes * class_probabilities)
-
-def latent_matching_score(coupling: np.ndarray, 
-                          z: np.ndarray) -> float:
-    z_matched = coupling @ z   ### (n x n) x (n x 4)
+def latent_matching_score(coupling: torch.Tensor, 
+                          z: torch.Tensor) -> float:
+    z_matched = coupling @ z  
     MSE = ((z - z_matched)**2).mean()
 
     return MSE
 
-def convert_to_labels(y: np.ndarray) -> np.ndarray:
+def convert_to_labels(y: Union[np.ndarray, torch.Tensor]):
+    if isinstance(y, torch.Tensor): y = y.cpu().detach().numpy()
     lookup = {tuple(np.unique(y, axis = 0)[i]):i for i in range(len(np.unique(y, axis = 0)))}
     y_tuple = tuple(map(tuple,y))
-    y = np.asarray([lookup[key] for key in y_tuple]) ## (20000,)
+    y = np.asarray([lookup[key] for key in y_tuple]) 
+    return torch.from_numpy(y)
 
-    return y
-
-def compute_avg_FOSCTTM(x: np.ndarray, y: np.ndarray) -> float:
+def compute_avg_FOSCTTM(x: Union[np.ndarray, torch.Tensor], 
+                        y: Union[np.ndarray, torch.Tensor]) -> float:
+    
+    if isinstance(x, torch.Tensor): x = x.cpu().detach().numpy()
+    if isinstance(y, torch.Tensor): y = y.cpu().detach().numpy()
+    
     return np.array(calc_domainAveraged_FOSCTTM(x, y)).mean()
+
+def load_from_checkpoint_(path: str, dataset: str, device: str = "cuda") -> pl.LightningModule:
+    assert device in ["cuda", "cpu"]
+    assert dataset in ["BALLS", "GEXADT"]
+
+    if dataset == "BALLS": module_classifier, module_vae = BallsClassifier, ImageVAEModule
+    if dataset == "GEXADT": module_classifier, module_vae = GEXADT_Classifier, GEXADTVAEModule
+
+    try:
+        model = module_classifier.load_from_checkpoint(path, map_location=torch.device(device))
+    except KeyError:
+        try:
+            model = module_vae.load_from_checkpoint(path, map_location=torch.device(device))
+        except KeyError:
+            print(f"Checkpoint at {path} did not correspond to a model for dataset {dataset}!")
+    
+    return model 
+
 

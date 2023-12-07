@@ -126,13 +126,32 @@ class MatchingProbe(LightningModule):
     def test_step(self, batch, batch_idx):
         ## we only use validation to see how the classifier is doing 
         loss = self._training_step(batch, batch_idx)
-        self.log("test loss", loss)
+        x1, x2, y = batch
+        baseline_pred = x2.mean(dim = 0, keepdim=True).expand(x2.shape[0], -1)
+        baseline_loss = self.loss(baseline_pred, x2)
+        r2 = 1 - loss/baseline_loss
+        self.log("Test Baseline Loss", baseline_loss, on_epoch = True)
+        self.log("Test Loss", loss, on_epoch = True)
+        self.log("Test R2", r2, on_epoch = True)
+
+        if self.unbiased == True:
+            with torch.no_grad():
+                if self.embedding == "random":
+                    coupling = torch.full((x2.shape[0], x2.shape[0]), torch.tensor(1/x2.shape[0]), device = "cuda")
+                elif isinstance(self.embedding, LightningModule):
+                    match1, match2 = self.embedding(x1, x2)
+                    coupling = eot_matching(match1, match2)
+
+                pred = self.probe(x1)
+                pred_projected = torch.t(coupling) @ pred
+                loss_projected = self.loss(pred_projected, x2)
+
+                self.log("Test Loss Projected", loss_projected)
 
     def on_test_epoch_end(self):
         pass
 
     def setup(self, stage:str):
-        ## placeholders to compute matching metrics on the fly
         test_loader = self.trainer.datamodule.test_dataloader()
         batch1, batch2, _ = next(iter(test_loader))
         num_input = batch1.shape[1]

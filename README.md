@@ -1,6 +1,16 @@
+### Data Preparation
+
+The two relevant datasets can be loaded by running 
+
+```
+bash data.sh
+```
+
+which will download the CITE-seq data from GEO and process it, as well as generate the synthetic image data. If the data files already exist, the script will skip data generation. For a hard reset, you can run the script with the optional flag `-c`, which will first empty the dataset directory.
+
 ### Training
 
-Example training script:
+All the code assumes you have cuda available. An example training script:
 
 ```
 python main.py --dataset=GEXADT --max_epochs=250 --batch_size=256 --eval_interval=1 --run_scot

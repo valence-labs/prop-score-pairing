@@ -190,13 +190,12 @@ class GEXADTDataModule(LightningDataModule):
         return train_df, val_df, test_df
 
     def load_data(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
-        data_adt = pd.read_parquet("/mnt/ps/home/CORP/johnny.xi/sandbox/matching/data/datasets/neurips_2021_bm/adt.parquet") ## gonna want to have two of these
-        data_gex = pd.read_parquet("/mnt/ps/home/CORP/johnny.xi/sandbox/matching/data/datasets/neurips_2021_bm/gex_pca_200.parquet") ## gonna want to have two of these
+        data_adt = pd.read_parquet("/mnt/ps/home/CORP/johnny.xi/sandbox/matching/data/datasets/neurips_2021_bm/adt.parquet") 
+        data_gex = pd.read_parquet("/mnt/ps/home/CORP/johnny.xi/sandbox/matching/data/datasets/neurips_2021_bm/gex_pca_200.parquet") 
         if self.d1_sub:
             d1 = ["s1d1", "s1d2", "s1d3"]
             data_adt = data_adt.loc[data_adt.batch.isin(d1)]
             data_gex = data_gex.loc[data_gex.batch.isin(d1)]
-            ## reset codes
             data_adt.CT_id = data_adt.cell_type.cat.remove_unused_categories().cat.codes
             data_gex.CT_id = data_gex.cell_type.cat.remove_unused_categories().cat.codes
 

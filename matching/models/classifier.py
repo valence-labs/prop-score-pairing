@@ -36,10 +36,8 @@ class GEXADT_Classifier(BaseClassifier):
                  n_hidden: int = 1024,
                 **kwargs):
         super().__init__(**kwargs)
-        ### implement clf1 as adt classifier
-        ### implement clf2 as gex classifier
 
-        ## Encoder from Caroline's lab
+        ## Encoder architecture from https://github.com/uhlerlab/cross-modal-autoencoders
                     
         self.encoder_1 = nn.Sequential(nn.LazyLinear(out_features = n_hidden),
                                 nn.ReLU(inplace=True),

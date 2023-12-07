@@ -7,61 +7,30 @@ from torchvision import transforms
 from .. import convert_to_labels
 from typing import Tuple, Optional
 
-class DomainSampler(BatchSampler):
-    def __init__(
-        self,
-        metadata: pd.DataFrame,
-        batch_size: int,
-        random_seed: Optional[int] = None,
-    ) -> None:
-        self.batch_size = batch_size
-        self.sub_batch_size = self.batch_size//12
-        self.metadata = metadata
-        self._rng = np.random.RandomState(random_seed)
-        # grouping by domain
-        self._groups = self.metadata.groupby("batch")
-        self._len = sum((len(group) // self.sub_batch_size for _, group in self._groups)) // (
-            self.batch_size // self.sub_batch_size
-        )
 
-    def __len__(self) -> int:
-        return self._len
+## Normalization statistics, channel means and sd
 
-    def __iter__(self):
-        # copy and shuffle (.sample) the groups into a new list
-        # we only want the indices of the rows, do not need the whole dataframe
-        groups = [group.sample(frac=1, random_state=self._rng).index for _, group in self._groups]
-        self._rng.shuffle(groups)
-        # prepare the batches by slicing samples out from each group
-        sub_batches = []
-        for group in groups:
-            for i in range(len(group) // self.sub_batch_size):
-                sub_batches.append(group[i * self.sub_batch_size : (i + 1) * self.sub_batch_size])
-        # shuffle them so that groups are distributed randomly over the epoch, then yield batches
-        self._rng.shuffle(sub_batches)
-        for i in range(len(sub_batches) // (self.batch_size // self.sub_batch_size)):
-            yield np.array(
-                sub_batches[
-                    i * (self.batch_size // self.sub_batch_size) : (i + 1) * (self.batch_size // self.sub_batch_size)
-                ]
-            ).reshape(-1)
-
-
-
+## These are for old data with no background, largely unused
 
 MU = np.array([0.998, 0.998, 0.998])
 SIG = np.array([0.034, 0.025, 0.025])
 
+## View/"Modality" 1
+
 MU_noisy_1 = np.array([0.50454001, 0.75075871, 0.40544085])
 SIG_noisy_1 = np.array([0.29195627, 0.14611416, 0.05556526])
 
+## View/"Modality" 2
+
 MU_noisy_2 = np.array([0.98185011, 0.75588502, 0.09406329])
 SIG_noisy_2 = np.array([0.05103349, 0.15451756, 0.15762656])
+
 class BallsDataset(Dataset):
-    """
-    Modified from Sparse Mechanisms
-    """
-    def __init__(self, x1, x2, y, z):
+    def __init__(self, 
+                 x1: torch.Tensor, 
+                 x2: torch.Tensor, 
+                 y: torch.Tensor, 
+                 z: torch.Tensor):
         super().__init__()
         self.x1 = x1
         self.x2 = x2
@@ -73,7 +42,7 @@ class BallsDataset(Dataset):
         [
             transforms.ToTensor(),
             transforms.Normalize(
-                mean=MU,  # channel means - the images are mostly white so close to 1.
+                mean=MU,
                 std=SIG,
             ),
         ]
@@ -115,6 +84,10 @@ class NoisyBallsDataset(BallsDataset):
 
             return x1, x2, y, z
 class BallsDataModule(LightningDataModule):
+    """
+    Modified from https://github.com/facebookresearch/CausalRepID/blob/main/data/balls_dataset_loader.py
+    Interventional Causal Representation Learning, Ahuja et al, https://arxiv.org/abs/2209.11924
+    """
     def __init__(self,
                  batch_size: int = 100):
         super().__init__()
@@ -122,7 +95,7 @@ class BallsDataModule(LightningDataModule):
         self.dataset = BallsDataset
     def prepare_data(self):
         self.data_dir = "/mnt/ps/home/CORP/johnny.xi/sandbox/matching/data/datasets/balls_scm_non_linear/intervention/"
-    def setup(self, stage:str):
+    def setup(self, stage: str):
         self.x1_tr = np.load(self.data_dir +  'train_' + 'x1' + '.npy')
         self.x2_tr = np.load(self.data_dir +  'train_' + 'x2' + '.npy')
         self.z_tr = np.load(self.data_dir +  'train_' + 'z' + '.npy')
@@ -135,11 +108,6 @@ class BallsDataModule(LightningDataModule):
         self.x2_test = np.load(self.data_dir +  'test_' + 'x2' + '.npy')
         self.z_test = np.load(self.data_dir +  'test_' + 'z' + '.npy')
         self.y_test = np.load(self.data_dir +  'test_' + 'y' + '.npy')  
-
-        # self.x1_full = np.concatenate((self.x1_tr, self.x1_val, self.x1_test), axis = 0)
-        # self.x2_full = np.concatenate((self.x2_tr, self.x2_val, self.x2_test), axis = 0)
-        # self.y_full = np.concatenate((self.y_tr, self.y_val, self.y_test))
-        # self.z_full = np.concatenate((self.z_tr, self.z_val, self.z_test))
         self.labels = convert_to_labels(self.y_tr)
         self.train_dataset = self.dataset(x1 = self.x1_tr, x2 = self.x2_tr, y = self.y_tr, z = self.z_tr)
         if stage == "test":
@@ -162,11 +130,11 @@ class NoisyBallsDataModule(BallsDataModule):
 class GEXADTDataModule(LightningDataModule):
     def __init__(self,
         batch_size: int = 256,
-        d1_sub: bool = False
-        ) -> None:
+        d1_sub: bool = False):
+
         super().__init__()
         self.batch_size = batch_size
-        self.d1_sub = d1_sub ## subset to donor 1?
+        self.d1_sub = d1_sub ## Give option to subset the data to donor 1 
 
     def _train_val_split_df(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         if "split" not in df.columns:
@@ -174,24 +142,23 @@ class GEXADTDataModule(LightningDataModule):
         train_idx = df["split"] == "train"
         val_idx = df["split"] == "val"
         test_idx = df["split"] == "test" 
-        print(np.sum(train_idx))
-        print(np.sum(val_idx))
-        print(np.sum(test_idx))
-        print(len(train_idx))
-        if min(np.sum(train_idx), np.sum(val_idx), np.sum(test_idx)) > 0.01*len(train_idx): ## If each split is at least 1% of full data
+
+        if min(np.sum(train_idx), np.sum(val_idx), np.sum(test_idx)) > 0.01*len(train_idx): ## If each split is at least 1% of full data, use the given split
             train_df = df[train_idx].reset_index()
             val_df = df[val_idx].reset_index()
             test_df = df[test_idx].reset_index()
-        else:
+        else:                                                                               
             df = df.reset_index()
             train_df = df[:round(len(df)*0.8)].reset_index()
             val_df = df[round(len(df)*0.8):round(len(df)*0.9)].reset_index()
             test_df = df[round(len(df)*0.9):].reset_index()
+
         return train_df, val_df, test_df
 
-    def load_data(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def load_data(self) -> Tuple[Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame], Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]]:
         data_adt = pd.read_parquet("/mnt/ps/home/CORP/johnny.xi/sandbox/matching/data/datasets/neurips_2021_bm/adt.parquet") 
         data_gex = pd.read_parquet("/mnt/ps/home/CORP/johnny.xi/sandbox/matching/data/datasets/neurips_2021_bm/gex_pca_200.parquet") 
+
         if self.d1_sub:
             d1 = ["s1d1", "s1d2", "s1d3"]
             data_adt = data_adt.loc[data_adt.batch.isin(d1)]
@@ -201,7 +168,7 @@ class GEXADTDataModule(LightningDataModule):
 
         return self._train_val_split_df(data_adt), self._train_val_split_df(data_gex)
     
-    def df_to_torch(self, df):
+    def df_to_torch(self, df: pd.DataFrame) -> Tuple[torch.Tensor, torch.Tensor]:
          df.columns = df.columns.astype(str)
          label_tensor = torch.tensor(df["CT_id"]).long()
          dat = df.filter(regex="^[0-9]").astype("float32").values  ## the data columns starts with numeric and metadata is non-numeric
@@ -210,11 +177,10 @@ class GEXADTDataModule(LightningDataModule):
          return dat_tensor, label_tensor
 
 
-    def setup(self, stage: Optional[str] = None) -> None:
-        # see https://pytorch-lightning.readthedocs.io/en/stable/data/datamodule.html#setup
-        # this hook is called on every process when using DDP at the beginning of fit
+    def setup(self, stage: str) -> None:
+
         (train_df_adt, val_df_adt, test_df_adt), (train_df_gex, val_df_gex, test_df_gex)  = self.load_data()
-        # unpack the prepared metadata
+
         self.train_data_adt, self.train_labels = self.df_to_torch(train_df_adt)
         self.val_data_adt, self.val_labels = self.df_to_torch(val_df_adt)
         self.test_data_adt, self.test_labels = self.df_to_torch(test_df_adt)
@@ -227,21 +193,21 @@ class GEXADTDataModule(LightningDataModule):
         self.val_dataset = GEXADTDataset(self.val_data_adt, self.val_data_gex, self.val_labels)
         self.test_dataset = GEXADTDataset(self.test_data_adt, self.test_data_gex, self.test_labels)   
 
-        self.labels = self.train_labels  
+        self.labels = self.train_labels ## for use during setup of module
 
     
     def train_dataloader(self) -> DataLoader:
         print("train dataloader")
-        #return DataLoader(self.train_dataset, batch_sampler = DomainSampler(self.train_data_adt, batch_size = self.batch_size), num_workers = 8)
         return DataLoader(self.train_dataset, batch_size = self.batch_size, shuffle = True, num_workers=8)
     def val_dataloader(self) -> DataLoader:
-        #return DataLoader(self.val_dataset, batch_sampler = DomainSampler(self.val_data_adt, batch_size = self.batch_size), num_workers = 8)
         return DataLoader(self.val_dataset, batch_size = self.batch_size, num_workers=8)
     def test_dataloader(self) -> DataLoader:
-        #return DataLoader(self.test_dataset, batch_sampler = DomainSampler(self.test_data_adt, batch_size = self.batch_size), num_workers = 8)
         return DataLoader(self.test_dataset, batch_size = self.batch_size, num_workers=8)
 class GEXADTDataset(Dataset):
-    def __init__(self, data_adt, data_gex, labels):
+    def __init__(self, 
+                 data_adt: torch.Tensor, 
+                 data_gex: torch.Tensor, 
+                 labels: torch.Tensor):
          super().__init__()
          self.adt_tensor = data_adt
          self.gex_tensor = data_gex
@@ -258,17 +224,24 @@ class GEXADTDataset(Dataset):
         return adt_row, gex_row, lab ## x1, x2, y
 
 class GEXADTDataset_Double(GEXADTDataset):
-    def __init__(self, data_adt, data_gex_1, data_gex_2, labels):
-         super().__init__(data_adt, data_gex_1, labels)
-         self.gex_tensor_2 = data_gex_2
+    """
+    Loading two samples from GEX modality for 2SLS loss
+    """
+    def __init__(self, 
+                 data_adt: torch.Tensor, 
+                 data_adt_2: torch.Tensor, 
+                 data_gex: torch.Tensor, 
+                 labels: torch.Tensor):
+         super().__init__(data_adt, data_gex, labels)
+         self.adt_tensor_2 = data_adt_2
 
     def __getitem__(self, index: int):
         adt_row = self.adt_tensor[index,:]
-        gex_row_1 = self.gex_tensor[index,:]
-        gex_row_2 = self.gex_tensor_2[index,:]
+        adt_row_2 = self.adt_tensor_2[index,:]
+        gex_row_2 = self.gex_tensor[index,:]
         lab = self.label_tensor[index]
 
-        return adt_row, gex_row_1, gex_row_2, lab ## x1, x2(1), x2(2), y
+        return adt_row, adt_row_2, gex_row_2, lab ## x1, x1(2), x2, y
      
 
 

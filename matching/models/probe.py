@@ -6,6 +6,8 @@ from torch.nn import functional as F
 from ..utils import eot_matching, snn_matching
 from ..data_utils.datamodules import GEXADTDataset, GEXADTDataset_Double
 
+from typing import Union
+
 class MSEFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, prediction, target, samples=None):
@@ -30,6 +32,9 @@ class MSEFunction(torch.autograd.Function):
         return grad_prediction, grad_target, grad_samples
     
 class IV_MSELoss(torch.nn.Module):
+    """
+    2SLS Unbiased Loss
+    """
     def __init__(self):
         super(IV_MSELoss, self).__init__()
 
@@ -49,7 +54,7 @@ class IV_MSELoss(torch.nn.Module):
 
 class MatchingProbe(LightningModule):
     def __init__(self,
-                 embedding = None, ## pre-trained embedding, or string "random" or "gt" for random matching or ground truth matching
+                 embedding: Union[LightningModule, str] = None, ## pre-trained embedding, or string "random" or "gt" for random matching or ground truth matching
                  lr: float = 0.001, 
                  wd: float = 0.0005,
                  unbiased: bool = False
@@ -71,7 +76,6 @@ class MatchingProbe(LightningModule):
             self.embedding = str.lower(self.embedding)
 
     def forward(self, x):
-        ## x1, x2 are different views of the scene
         pred = self.probe(x)
         return pred
     
@@ -161,7 +165,7 @@ class MatchingProbe(LightningModule):
                         nn.ReLU(inplace=True),
                         nn.Linear(num_input * 2, num_output))
         
-        ## match the data before training
+        ## match the data before training to modify the dataset, or do nothing if ground truth
         
         if self.embedding == "gt":
             if self.unbiased:
@@ -180,15 +184,13 @@ class MatchingProbe(LightningModule):
             for label in torch.unique(y):
                 subset = y == label
                 x1_, x2_ = x1[subset].clone(), x2[subset].clone()
-                #x2_ = x2_[torch.randperm(x2_.shape[0])]
-                x1_ = x1_[torch.randperm(x2_.shape[0])]  ## shuffle to avoid pathologies 
+                x1_ = x1_[torch.randperm(x1_.shape[0])]  ## shuffle to avoid pathologies 
                 if isinstance(self.embedding, LightningModule):
                     match1, match2 = self.embedding(x1_, x2_)
                     coupling = eot_matching(match1, match2)
                 if self.embedding == "random":
-                    coupling = torch.full((x2_.shape[0], x2_.shape[0]), torch.tensor(1/x2_.shape[0]), device = "cuda")
-                #idx = torch.multinomial(coupling, num_samples = 1)
-                idx = torch.multinomial(torch.t(coupling), num_samples = 1)  ## sampling x1 instead of x2 with torch.t 
+                    coupling = torch.full((x2_.shape[0], x2_.shape[0]), torch.tensor(1/x2_.shape[0]), device = "cuda") ## 1/n in coupling matrix everywhere
+                idx = torch.multinomial(torch.t(coupling), num_samples = 1)  ## remove torch.t to sample from x2 instead
                 x1_clone_1 = (x1_.clone())[torch.flatten(idx)].view(x1_.size())
                 x1[subset] = x1_clone_1
                 if self.unbiased: 
@@ -205,9 +207,7 @@ class MatchingProbe(LightningModule):
         pass
 
     def configure_optimizers(self):
-        optimizer = optim.Adam(filter(lambda p: p.requires_grad, self.parameters()), lr = self.lr, weight_decay = self.wd)
-        print(optimizer)
-        print(filter(lambda p: p.requires_grad, self.parameters()))
+        optimizer = optim.Adam(filter(lambda p: p.requires_grad, self.parameters()), lr = self.lr, weight_decay = self.wd) ## don't train encoder
         scheduler = optim.lr_scheduler.OneCycleLR(optimizer, max_lr = self.lr, total_steps = self.trainer.max_epochs, pct_start = 0.1)
         return [optimizer], [{"scheduler": scheduler, "interval": "epoch"}]
     

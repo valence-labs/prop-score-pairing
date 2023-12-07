@@ -8,10 +8,11 @@ from .base import BaseVAEModule
 from typing import List, Callable, Union, Any, TypeVar, Tuple
 from torchvision.models import resnet18, resnet50, resnet34
 
-
-Tensor = TypeVar('torch.tensor')
-## adapted from https://github.com/AntixK/PyTorch-VAE/blob/master/models/vanilla_vae.py    
+## This section is all adapted 
 class VanillaVAE(nn.Module):
+    """
+    Taken from https://github.com/AntixK/PyTorch-VAE/blob/master/models/vanilla_vae.py    
+    """
     def __init__(self,
                  in_channels: int = 3,
                  latent_dim: int = 512,
@@ -80,7 +81,7 @@ class VanillaVAE(nn.Module):
                                       kernel_size= 3, padding= 1),
                             nn.Sigmoid())  ## our images are [0,1]
 
-    def encode(self, input: Tensor) -> List[Tensor]:
+    def encode(self, input: torch.Tensor) -> List[torch.Tensor]:
         """
         Encodes the input by passing through the encoder network
         and returns the latent codes.
@@ -96,7 +97,7 @@ class VanillaVAE(nn.Module):
 
         return [mu, log_var]
 
-    def decode(self, z: Tensor) -> Tensor:
+    def decode(self, z: torch.Tensor) -> torch.Tensor:
         """
         Maps the given latent codes
         onto the image space.
@@ -109,7 +110,7 @@ class VanillaVAE(nn.Module):
         result = self.final_layer(result)
         return result
 
-    def reparameterize(self, mu: Tensor, logvar: Tensor) -> Tensor:
+    def reparameterize(self, mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
         """
         Reparameterization trick to sample from N(mu, var) from
         N(0,1).
@@ -121,14 +122,14 @@ class VanillaVAE(nn.Module):
         eps = torch.randn_like(std)
         return eps * std + mu
 
-    def forward(self, input: Tensor, **kwargs) -> List[Tensor]:
+    def forward(self, input: torch.Tensor, **kwargs) -> List[torch.Tensor]:
         mu, log_var = self.encode(input)
         z = self.reparameterize(mu, log_var)
         return  [self.decode(z), z, mu, log_var]
     
     def sample(self,
                num_samples:int,
-               current_device: int, **kwargs) -> Tensor:
+               current_device: int, **kwargs) -> torch.Tensor:
         """
         Samples from the latent space and return the corresponding
         image space map.
@@ -144,7 +145,7 @@ class VanillaVAE(nn.Module):
         samples = self.decode(z)
         return samples
 
-    def generate(self, x: Tensor, **kwargs) -> Tensor:
+    def generate(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
         """
         Given an input image x, returns the reconstructed image
         :param x: (Tensor) [B x C x H x W]
@@ -162,8 +163,8 @@ class GEXADTVAE(VanillaVAE):
         super().__init__()
         self.latent_dim = latent_dim
 
-        ## taken from carolines group
-                     
+        ## Encoder architecture from https://github.com/uhlerlab/cross-modal-autoencoders, same as classifier
+
         self.encoder = nn.Sequential(nn.Linear(input_dim, n_hidden),
                                 nn.ReLU(inplace=True),
                                 nn.BatchNorm1d(n_hidden),
@@ -179,8 +180,8 @@ class GEXADTVAE(VanillaVAE):
                                 nn.Linear(n_hidden, n_hidden),
                                 )
 
-        self.fc1 = nn.Linear(n_hidden, latent_dim)
-        self.fc2 = nn.Linear(n_hidden, latent_dim)
+        self.fc_mu = nn.Linear(n_hidden, latent_dim)
+        self.fc_var = nn.Linear(n_hidden, latent_dim)
 
         self.decoder = nn.Sequential(nn.Linear(latent_dim, n_hidden),
                                      nn.ReLU(inplace=True),
@@ -198,23 +199,7 @@ class GEXADTVAE(VanillaVAE):
                                     )
     
 
-    def encode(self, input: Tensor) -> List[Tensor]:
-        """
-        Encodes the input by passing through the encoder network
-        and returns the latent codes.
-        :param input: (Tensor) Input tensor to encoder [N x C x H x W]
-        :return: (Tensor) List of latent codes
-        """
-        result = self.encoder(input)
-        result = torch.flatten(result, start_dim=1)
-        # Split the result into mu and var components
-        # of the latent Gaussian distribution
-        mu = self.fc1(result)
-        log_var = self.fc2(result)
-
-        return [mu, log_var]
-
-    def decode(self, z: Tensor) -> Tensor:
+    def decode(self, z: torch.Tensor) -> torch.Tensor:
         """
         Maps the given latent codes
         onto the image space.
@@ -224,19 +209,12 @@ class GEXADTVAE(VanillaVAE):
         result = self.decoder(z)
         return result
 
-    def forward(self, input: Tensor, **kwargs) -> List[Tensor]:
-        mu, log_var = self.encode(input)
-        z = self.reparameterize(mu, log_var)
-        return  [self.decode(z), z, mu, log_var]
-
-
-
 class GEXADTVAEModule(BaseVAEModule):
     def __init__(self,
                  **kwargs
                  ):
         super().__init__(**kwargs, num_classes = 45, latent_dim = 128)
-        self.model1 = GEXADTVAE(input_dim = 134)  ## adt
+        self.model1 = GEXADTVAE(input_dim = 134)  ## ADT
         self.model2 = GEXADTVAE(input_dim = 200)  ## GEX PCA
 
 class ImageVAEModule(BaseVAEModule):

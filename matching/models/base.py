@@ -19,7 +19,7 @@ class BaseClassifier(LightningModule):
         ## subclasses should define self.clf1, self.clf2 classifiers for each modality in their init
 
     def forward(self, x1, x2):
-        ## x1, x2 are different views of the scene
+        ## x1, x2 are different modalities
         logits_1 = self.clf1(x1)
         logits_2 = self.clf2(x2)
         return logits_1, logits_2
@@ -30,8 +30,8 @@ class BaseClassifier(LightningModule):
         logits_1, logits_2 = self(x1, x2)
         loss_1 = self.loss(logits_1, y)
         loss_2 = self.loss(logits_2, y)
-        self.log("train loss 1", loss_1)
-        self.log("train loss 2", loss_2)
+        self.log("train loss modality 1", loss_1)
+        self.log("train loss modality 2", loss_2)
         return {"loss": loss_1 + loss_2,
                 "md1_loss": loss_1,
                 "md2_loss": loss_2}
@@ -39,8 +39,8 @@ class BaseClassifier(LightningModule):
     def validation_step(self, batch, batch_idx):
         ## we only use validation to see how the classifier is doing 
         loss_dict = self.training_step(batch, batch_idx)
-        self.log("val loss 1", loss_dict["md1_loss"])
-        self.log("val loss 2", loss_dict["md2_loss"])
+        self.log("val loss modality 1", loss_dict["md1_loss"])
+        self.log("val loss modality 2", loss_dict["md2_loss"])
         self.log("full_val_loss", 0.5*loss_dict["loss"]) ## used for checkpointing
 
     def on_validation_epoch_end(self): 
@@ -49,14 +49,13 @@ class BaseClassifier(LightningModule):
     def test_step(self, batch, batch_idx):
         ## we only use test to see how the classifier is doing 
         loss_dict = self.training_step(batch, batch_idx)
-        self.log("test loss 1", loss_dict["md1_loss"])
-        self.log("test loss 2", loss_dict["md2_loss"])
+        self.log("test loss modality 1", loss_dict["md1_loss"])
+        self.log("test loss modality 2", loss_dict["md2_loss"])
 
     def on_test_epoch_end(self):
         pass
 
     def setup(self, stage:str):
-        ## placeholders to compute matching metrics on the fly
         pass
 
     def on_train_epoch_end(self):
@@ -68,6 +67,10 @@ class BaseClassifier(LightningModule):
         return [optimizer], [{"scheduler": scheduler, "interval": "epoch"}]
     
 class BaseVAEModule(LightningModule):
+    """
+    Modified from https://github.com/uhlerlab/cross-modal-autoencoders
+    Multi-Domain Translation between Single-Cell Imaging and Sequencing Data using Autoencoders, Yang et al, https://www.biorxiv.org/content/10.1101/2019.12.13.875922v1.full
+    """
     def __init__(self, 
                  lr: float = 0.0001, 
                  wd: float = 0.00001,
@@ -89,14 +92,18 @@ class BaseVAEModule(LightningModule):
         ## subclasses should define self.model1, model2 VAEs for each modality in their init
         ## vaes should have attribute self.model1.latent_dim
 
-        self.CE_Cond = torch.nn.CrossEntropyLoss()  # torch.nn.CrossEntropyLoss(weight = torch.from_numpy(class_weights).float())
+        self.CE_Cond = torch.nn.CrossEntropyLoss()  
         self.CE = torch.nn.CrossEntropyLoss()
 
         ## taken from caroline's paper
         
+        ## this is the perturbation classifier
+
         self.condclf = nn.Sequential(
             nn.Linear(latent_dim, num_classes),
         )
+
+        ## this is a modality classifier
 
         self.clf = nn.Sequential(
             nn.Linear(latent_dim, 1024),
@@ -110,8 +117,8 @@ class BaseVAEModule(LightningModule):
 
 
     def forward(self, x1, x2):
-        ## x1, x2 are different views of the scene
-        ## primarily used for forward call in callbacks
+        ## x1, x2 are different modalities
+        ## this forward pass is for evaluation only
         latent_1 = self.model1(x1)[1]  ## pick out latent 
         latent_2 = self.model2(x2)[1] 
         return latent_1, latent_2
@@ -156,13 +163,13 @@ class BaseVAEModule(LightningModule):
                 "md1_loss": loss_1["vae_loss"],
                 "md2_loss": loss_2["vae_loss"]}
 
-    ## taken from ## adapted from https://github.com/AntixK/PyTorch-VAE/blob/master/models/vanilla_vae.py    
     def loss_function(self, 
                       recons,
                       input,
                       mu,
                       log_var) -> dict:
         """
+        Adapted from https://github.com/AntixK/PyTorch-VAE/blob/master/models/vanilla_vae.py
         Computes the VAE loss function.
         KL(N(\mu, \sigma), N(0, 1)) = \log \frac{1}{\sigma} + \frac{\sigma^2 + \mu^2}{2} - \frac{1}{2}
         :param args:
@@ -200,7 +207,6 @@ class BaseVAEModule(LightningModule):
         pass
 
     def configure_optimizers(self):
-        ## change to adam 
         optimizer = optim.Adam(self.parameters(), lr = self.lr, weight_decay = self.wd)
         scheduler = optim.lr_scheduler.OneCycleLR(optimizer, max_lr = self.lr, total_steps = self.trainer.max_epochs, pct_start = 0.1)
         return [optimizer], [{"scheduler": scheduler, "interval": "epoch"}]

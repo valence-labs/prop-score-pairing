@@ -7,6 +7,9 @@ class ImageEncoder(torch.nn.Module):
         super(ImageEncoder, self).__init__()        
         
         self.latent_dim = latent_dim
+
+        ### This image encoder is from https://github.com/facebookresearch/CausalRepID
+
         # self.width = min(latent_dim * 4, 256)
         
         # self.base_model = resnet18(pretrained=True)        
@@ -19,6 +22,8 @@ class ImageEncoder(torch.nn.Module):
         #             nn.Linear(self.width, self.latent_dim),
         #         ] 
         # self.fc_net = nn.Sequential(*self.fc_layers)
+
+        ## Image encoder from https://github.com/uhlerlab/cross-modal-autoencoders
 
         modules = []
         hidden_dims = [32, 64, 128, 256, 512]

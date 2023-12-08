@@ -36,7 +36,7 @@ class BallsDataset(Dataset):
         self.x2 = x2
         self.z = z
         ### convert y to labels
-        self.y = convert_to_labels(y)
+        self.y = convert_to_labels(y)  ## makes a tensor
         ###
         self.transform = transforms.Compose(
         [
@@ -51,7 +51,7 @@ class BallsDataset(Dataset):
         return len(self.y)
 
     def __getitem__(self, index):
-        x1, x2, y, z = self.x1[index], self.x2[index], torch.tensor(self.y[index]).long(), torch.tensor(self.z[index]).float().flatten()
+        x1, x2, y, z = self.x1[index], self.x2[index], self.y[index].long(), torch.tensor(self.z[index]).float().flatten()
         x1, x2 = self.transform(x1), self.transform(x2)
 
         return x1, x2, y, z
@@ -79,7 +79,7 @@ class NoisyBallsDataset(BallsDataset):
         )
 
         def __getitem__(self, index):
-            x1, x2, y, z = self.x1[index], self.x2[index], torch.tensor(self.y[index]).long(), torch.tensor(self.z[index]).float().flatten()
+            x1, x2, y, z = self.x1[index], self.x2[index], self.y[index].long(), torch.tensor(self.z[index]).float().flatten()
             x1, x2 = self.transform1(x1), self.transform2(x2)
 
             return x1, x2, y, z
@@ -108,7 +108,6 @@ class BallsDataModule(LightningDataModule):
         self.x2_test = np.load(self.data_dir +  'test_' + 'x2' + '.npy')
         self.z_test = np.load(self.data_dir +  'test_' + 'z' + '.npy')
         self.y_test = np.load(self.data_dir +  'test_' + 'y' + '.npy')  
-        self.labels = convert_to_labels(self.y_tr)
         self.train_dataset = self.dataset(x1 = self.x1_tr, x2 = self.x2_tr, y = self.y_tr, z = self.z_tr)
         self.val_dataset = self.dataset(x1 = self.x1_val, x2 = self.x2_val, y = self.y_val, z = self.z_val)
         if stage == "test":
@@ -189,8 +188,6 @@ class GEXADTDataModule(LightningDataModule):
 
         self.train_dataset = GEXADTDataset(self.train_data_adt, self.train_data_gex, self.train_labels)
         self.val_dataset = GEXADTDataset(self.val_data_adt, self.val_data_gex, self.val_labels)
-
-        self.labels = self.train_labels ## for use during setup of module
 
         if stage == "test":
             self.test_data_adt, self.test_labels = self.df_to_torch(test_df_adt)

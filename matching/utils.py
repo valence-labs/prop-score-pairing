@@ -99,13 +99,14 @@ def scot_matching(x: Union[torch.Tensor, np.ndarray],
     return torch.from_numpy(coupling)
 
 def latent_matching_score(coupling: torch.Tensor, 
-                          z: torch.Tensor) -> float:
+                          z: Union[np.ndarray, torch.Tensor]) -> float:
+    if isinstance(z, np.ndarray): z = torch.from_numpy(z).to("cuda")
     z_matched = coupling @ z  
     MSE = ((z - z_matched)**2).mean()
 
     return MSE
 
-def convert_to_labels(y: Union[np.ndarray, torch.Tensor]):
+def convert_to_labels(y: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:
     if isinstance(y, torch.Tensor): y = y.cpu().detach().numpy()
     lookup = {tuple(np.unique(y, axis = 0)[i]):i for i in range(len(np.unique(y, axis = 0)))}
     y_tuple = tuple(map(tuple,y))

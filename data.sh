@@ -17,11 +17,13 @@ done
 
 echo "downloading CITE-seq data if needed..."
 
-CITEDATA=data/raw/GSE194122_openproblems_neurips2021_cite_BMMC_processed.h5ad.gz
+CITEDATA=data/raw/GSE194122_openproblems_neurips2021_cite_BMMC_processed.h5ad
 
 if ! [[ -f "$CITEDATA" ]]; then
     wget -q -P data/raw/ https://ftp.ncbi.nlm.nih.gov/geo/series/GSE194nnn/GSE194122/suppl/GSE194122%5Fopenproblems%5Fneurips2021%5Fcite%5FBMMC%5Fprocessed.h5ad.gz
     gzip -d data/raw/GSE194122_openproblems_neurips2021_cite_BMMC_processed.h5ad.gz
+else
+    echo "Data already exists, skipping download."
 fi
 
 cd data/scripts/

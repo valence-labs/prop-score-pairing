@@ -37,7 +37,6 @@ def compute_metrics(match1: torch.Tensor,
         print(f"starting matching on label {label} with {len(x1_)} samples...")
         start = timer()
         coupling = matching(x1_, x2_)
-        #if isinstance(coupling, torch.Tensor): coupling = coupling.cpu().detach().numpy()
         end = timer()
         print(f"{matching} took {end - start} seconds on label {label} with {len(x1_)} samples")
         if torch.isnan(coupling).any(): continue ## skip everything if any nans 
@@ -55,7 +54,7 @@ def compute_metrics(match1: torch.Tensor,
             outputs[f"FOSCTTM {label}"] = float(FOSCTTM)
         if isinstance(data, BallsDataModule):
             z_subset = z[subset]
-            mse = latent_matching_score(coupling, z_subset)
+            mse = float(latent_matching_score(coupling, z_subset))
             random_mse = float(((z_subset[torch.randperm(z_subset.size()[0])] - z_subset)**2).mean())
             mses.append(mse)
             random_mses.append(random_mse)
@@ -91,6 +90,7 @@ class MatchingMetrics(Callback):
         self.loader = torch.utils.data.DataLoader(trainer.datamodule.val_dataset, batch_size = len(trainer.datamodule.val_dataset))
         if isinstance(trainer.datamodule, BallsDataModule):
             self.x1, self.x2, self.y, self.z = next(iter(self.loader))  ## only have ground truth z for balls dataset
+            self.z = self.z
         elif isinstance(trainer.datamodule, GEXADTDataModule):
             self.x1, self.x2, self.y = next(iter(self.loader))
             self.z = None

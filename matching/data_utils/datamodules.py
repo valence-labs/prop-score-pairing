@@ -189,10 +189,11 @@ class GEXADTDataModule(LightningDataModule):
         self.train_dataset = GEXADTDataset(self.train_data_adt, self.train_data_gex, self.train_labels)
         self.val_dataset = GEXADTDataset(self.val_data_adt, self.val_data_gex, self.val_labels)
 
-        if stage == "test":
-            self.test_data_adt, self.test_labels = self.df_to_torch(test_df_adt)
-            self.test_data_gex, _ = self.df_to_torch(test_df_gex)
-            self.test_dataset = GEXADTDataset(self.test_data_adt, self.test_data_gex, self.test_labels)   
+
+        ## We need these in train mode as well for probing
+        self.test_data_adt, self.test_labels = self.df_to_torch(test_df_adt)
+        self.test_data_gex, _ = self.df_to_torch(test_df_gex)
+        self.test_dataset = GEXADTDataset(self.test_data_adt, self.test_data_gex, self.test_labels)   
 
 
 

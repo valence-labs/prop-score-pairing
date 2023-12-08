@@ -55,7 +55,7 @@ def snn_matching(x: Union[torch.Tensor, np.ndarray],
     jaccard.data = jaccard.data / (2 * kx + 2 * ky - jaccard.data)
     matching_matrix = jaccard.multiply(1 / jaccard.sum(axis=1))
     
-    return torch.from_numpy(matching_matrix.toarray())
+    return torch.from_numpy(matching_matrix.toarray()).float()
 
 def eot_matching(x: Union[torch.Tensor, np.ndarray], 
                  y: Union[torch.Tensor, np.ndarray], 
@@ -78,7 +78,7 @@ def eot_matching(x: Union[torch.Tensor, np.ndarray],
         reg += 0.01
         coupling, log= ot.sinkhorn(p, q, M, reg = reg, numItermax=max_iter, stopThr=1e-10, method = method, log=True, verbose=verbose)
     coupling = coupling/coupling.sum(dim = 1, keepdims = True)
-    return coupling
+    return coupling.detach().cpu()
 
 def scot_matching(x: Union[torch.Tensor, np.ndarray], 
                   y: Union[torch.Tensor, np.ndarray]) -> torch.Tensor:
@@ -100,7 +100,7 @@ def scot_matching(x: Union[torch.Tensor, np.ndarray],
 
 def latent_matching_score(coupling: torch.Tensor, 
                           z: Union[np.ndarray, torch.Tensor]) -> float:
-    if isinstance(z, np.ndarray): z = torch.from_numpy(z).to("cuda")
+    if isinstance(z, np.ndarray): z = torch.from_numpy(z)
     z_matched = coupling @ z  
     MSE = ((z - z_matched)**2).mean()
 
@@ -127,13 +127,14 @@ def load_from_checkpoint_(path: str, dataset: str, device: str = "cuda") -> pl.L
 
     if dataset == "BALLS": module_classifier, module_vae = BallsClassifier, ImageVAEModule
     if dataset == "GEXADT": module_classifier, module_vae = GEXADT_Classifier, GEXADTVAEModule
-
     try:
+        print(f"Trying to load {module_classifier} model...")
         model = module_classifier.load_from_checkpoint(path, map_location=torch.device(device))
-    except KeyError:
+    except (KeyError, RuntimeError):
         try:
+            print(f"Trying to load {module_vae} model...")
             model = module_vae.load_from_checkpoint(path, map_location=torch.device(device))
-        except KeyError:
+        except (KeyError, RuntimeError):
             print(f"Checkpoint at {path} did not correspond to a model for dataset {dataset}!")
     
     return model 

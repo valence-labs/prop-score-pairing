@@ -110,8 +110,8 @@ class BallsDataModule(LightningDataModule):
         self.y_test = np.load(self.data_dir +  'test_' + 'y' + '.npy')  
         self.labels = convert_to_labels(self.y_tr)
         self.train_dataset = self.dataset(x1 = self.x1_tr, x2 = self.x2_tr, y = self.y_tr, z = self.z_tr)
+        self.val_dataset = self.dataset(x1 = self.x1_val, x2 = self.x2_val, y = self.y_val, z = self.z_val)
         if stage == "test":
-            self.val_dataset = self.dataset(x1 = self.x1_val, x2 = self.x2_val, y = self.y_val, z = self.z_val)
             self.test_dataset = self.dataset(x1 = self.x1_test, x2 = self.x2_test, y = self.y_test, z = self.z_test)
     def train_dataloader(self):
         return DataLoader(self.dataset(x1 = self.x1_tr, x2 = self.x2_tr, y = self.y_tr, z = self.z_tr), batch_size = self.batch_size, num_workers=8)
@@ -183,19 +183,22 @@ class GEXADTDataModule(LightningDataModule):
 
         self.train_data_adt, self.train_labels = self.df_to_torch(train_df_adt)
         self.val_data_adt, self.val_labels = self.df_to_torch(val_df_adt)
-        self.test_data_adt, self.test_labels = self.df_to_torch(test_df_adt)
 
         self.train_data_gex, _ = self.df_to_torch(train_df_gex)
         self.val_data_gex, _ = self.df_to_torch(val_df_gex)
-        self.test_data_gex, _ = self.df_to_torch(test_df_gex)
 
         self.train_dataset = GEXADTDataset(self.train_data_adt, self.train_data_gex, self.train_labels)
         self.val_dataset = GEXADTDataset(self.val_data_adt, self.val_data_gex, self.val_labels)
-        self.test_dataset = GEXADTDataset(self.test_data_adt, self.test_data_gex, self.test_labels)   
 
         self.labels = self.train_labels ## for use during setup of module
 
-    
+        if stage == "test":
+            self.test_data_adt, self.test_labels = self.df_to_torch(test_df_adt)
+            self.test_data_gex, _ = self.df_to_torch(test_df_gex)
+            self.test_dataset = GEXADTDataset(self.test_data_adt, self.test_data_gex, self.test_labels)   
+
+
+
     def train_dataloader(self) -> DataLoader:
         print("train dataloader")
         return DataLoader(self.train_dataset, batch_size = self.batch_size, shuffle = True, num_workers=8)

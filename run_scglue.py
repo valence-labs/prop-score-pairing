@@ -6,12 +6,15 @@ import scglue
 import anndata as ad
 import os
 import sys
+import torch
 sys.path.insert(0, os.path.abspath(".."))
-from matching.utils import snn_matching, eot_matching, calc_domainAveraged_FOSCTTM
+from matching.utils import snn_matching, eot_matching, calc_domainAveraged_FOSCTTM, convert_to_labels
+from matching.callbacks import compute_metrics
+from matching.data_utils.datamodules import GEXADTDataModule
 import warnings
 warnings.filterwarnings('ignore')
 
-cite = sc.read("/mnt/ps/home/CORP/johnny.xi/sandbox/matching/data/GSE194122_openproblems_neurips2021_cite_BMMC_processed.h5ad")
+cite = sc.read("/scratch/st-benbr-1/xijohnny/matching/data/raw/GSE194122_openproblems_neurips2021_cite_BMMC_processed.h5ad")
 
 adt_ad = cite[:,cite.var.feature_types == "ADT"]
 gex_ad = cite[:,cite.var.feature_types == "GEX"]
@@ -64,39 +67,49 @@ scglue.models.configure_dataset(
 )
 
 glue = scglue.models.fit_SCGLUE(
-    {"rna": gex_ad, "adt": adt_ad},
-    graph
+    adatas = {"rna": gex_ad, "adt": adt_ad},
+    graph = graph
 )
 
-rna_encodings = glue.encode_data("rna", gex_ad)
-adt_encodings = glue.encode_data("adt", adt_ad)
+gex_ad.obs["split"] = np.where(gex_ad.obs["is_train"] == "train", "train", np.where(gex_ad.obs["is_train"] == "test", "val", "test"))
 
-cell_types = np.unique(gex_ad.obs.cell_type)
+rna_encodings = torch.from_numpy(glue.encode_data("rna", gex_ad))[gex_ad.obs.split == "test"]
+adt_encodings = torch.from_numpy(glue.encode_data("adt", adt_ad))[gex_ad.obs.split == "test"]
 
-knn_trace_avg, eot_trace_avg, knn_foscttm_avg, eot_foscttm_avg = 0, 0, 0, 0
+cell_types = torch.from_numpy(gex_ad.obs.cell_type.cat.codes.values)[gex_ad.obs.split == "test"]
 
-for ct in cell_types:
-    idx = np.where(gex_ad.obs.cell_type == ct)
-    rna_sub, adt_sub = gex_ad.obsm["X_pca"][idx], adt_ad.X.toarray()[idx]
-    rna_match_sub, adt_match_sub = rna_encodings[idx], adt_encodings[idx]
-    print(f"Cell type: {ct}, Number of samples: {rna_sub.shape[0]}")
-    snn_sub = snn_matching(rna_match_sub, adt_match_sub)
-    print(f"Cell type: {ct}, kNN trace: {np.trace(snn_sub)/rna_sub.shape[0]}")
-    eot_sub = eot_matching(rna_match_sub, adt_match_sub)
-    print(f"Cell type: {ct}, EOT trace: {np.trace(eot_sub)/rna_sub.shape[0]}")
-    snn_match = snn_sub @ adt_sub
-    eot_match = eot_sub @ adt_sub
-    knn_foscttm = np.array(calc_domainAveraged_FOSCTTM(adt_sub, snn_match)).mean()
-    eot_foscttm = np.array(calc_domainAveraged_FOSCTTM(adt_sub, eot_match)).mean()
-    print(f"Cell type: {ct}, kNN FOSCTTM: {knn_foscttm}") 
-    print(f"Cell type: {ct}, EOT FOSCTTM: {eot_foscttm}") 
+outputs_EOT = compute_metrics(match1 = rna_encodings, match2 = adt_encodings, y = cell_types, matching = eot_matching, data = GEXADTDataModule())
+outputs_kNN = compute_metrics(match1 = rna_encodings, match2 = adt_encodings, y = cell_types, matching = snn_matching, data = GEXADTDataModule())
 
-    knn_trace_avg += np.trace(snn_sub)/len(cell_types)
-    eot_trace_avg += np.trace(eot_sub)/len(cell_types)
-    knn_foscttm_avg += knn_foscttm/len(cell_types)
-    eot_foscttm_avg += eot_foscttm/len(cell_types)
+pd.DataFrame.from_dict(data = outputs_kNN, orient = "index").to_csv("results/scGLUE" + "_kNN.csv", header = False)
+pd.DataFrame.from_dict(data = outputs_EOT, orient = "index").to_csv("results/scGLUE" + "_EOT.csv", header = False)
 
-print(f"Average kNN Trace {knn_trace_avg}")
-print(f"Average EOT Trace {eot_trace_avg}")
-print(f"Average kNN FOSCTTM {knn_foscttm_avg}")
-print(f"Average EOT FOSCTTM {eot_foscttm_avg}")
+# cell_types = np.unique(gex_ad.obs.cell_type)
+
+# knn_trace_avg, eot_trace_avg, knn_foscttm_avg, eot_foscttm_avg = 0, 0, 0, 0
+
+# for ct in cell_types:
+#     idx = np.where(gex_ad.obs.cell_type == ct)
+#     rna_sub, adt_sub = gex_ad.obsm["X_pca"][idx], adt_ad.X.toarray()[idx]
+#     rna_match_sub, adt_match_sub = rna_encodings[idx], adt_encodings[idx]
+#     print(f"Cell type: {ct}, Number of samples: {rna_sub.shape[0]}")
+#     snn_sub = snn_matching(rna_match_sub, adt_match_sub)
+#     print(f"Cell type: {ct}, kNN trace: {np.trace(snn_sub)/rna_sub.shape[0]}")
+#     eot_sub = eot_matching(rna_match_sub, adt_match_sub)
+#     print(f"Cell type: {ct}, EOT trace: {np.trace(eot_sub)/rna_sub.shape[0]}")
+#     snn_match = snn_sub @ adt_sub
+#     eot_match = eot_sub @ adt_sub
+#     knn_foscttm = np.array(calc_domainAveraged_FOSCTTM(adt_sub, snn_match)).mean()
+#     eot_foscttm = np.array(calc_domainAveraged_FOSCTTM(adt_sub, eot_match)).mean()
+#     print(f"Cell type: {ct}, kNN FOSCTTM: {knn_foscttm}") 
+#     print(f"Cell type: {ct}, EOT FOSCTTM: {eot_foscttm}") 
+
+#     knn_trace_avg += np.trace(snn_sub)/len(cell_types)
+#     eot_trace_avg += np.trace(eot_sub)/len(cell_types)
+#     knn_foscttm_avg += knn_foscttm/len(cell_types)
+#     eot_foscttm_avg += eot_foscttm/len(cell_types)
+
+# print(f"Average kNN Trace {knn_trace_avg}")
+# print(f"Average EOT Trace {eot_trace_avg}")
+# print(f"Average kNN FOSCTTM {knn_foscttm_avg}")
+# print(f"Average EOT FOSCTTM {eot_foscttm_avg}")

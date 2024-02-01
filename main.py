@@ -1,4 +1,4 @@
-from pytorch_lightning import loggers, Trainer
+from pytorch_lightning import loggers, Trainer, seed_everything
 import argparse
 from matching.models.classifier import BallsClassifier, GEXADT_Classifier
 from matching.models.vae import ImageVAEModule, GEXADTVAEModule
@@ -18,22 +18,25 @@ def parse_arguments():
     parser.add_argument("--lamb", metavar = "WEIGHT ON KL TERM", type = float, default = 0.0000000001)
     parser.add_argument("--alpha", metavar = "WEIGHT ON MODALITY CLASSIFIER", type = float, default = 1)
     parser.add_argument("--beta", metavar = "WEIGHT ON LABEL CLASSIFIER", type = float, default = 0.1)
+    parser.add_argument("--seed", metavar = "SEED", type = int, default = 42)
     return parser.parse_args()
 
 if __name__ == "__main__":
 
     args = parse_arguments()
 
+    seed_everything(args.seed, workers=True)
+
     assert args.model in ["CLASSIFIER", "VAE"]
 
-    logdir = "checkpoints/" + "balls/" + args.model + "/"
+    logdir = "checkpoints/" + args.dataset + "/" + args.model + "/"
     wandb_logger = loggers.WandbLogger(save_dir = logdir, project = "Matching-Experiments")
     wandb_logger.experiment.config.update(vars(args))
     wandb_logger.experiment.config["model"] = args.model
 
     checkpoint_callback = ModelCheckpoint(
         dirpath = "results/checkpoints/",
-        filename = args.model + args.dataset + "-{epoch:02d}-{full_val_loss:.2f}",
+        filename = args.model + args.dataset + str(args.seed),
         monitor = "full_val_loss"
     )
 
@@ -59,6 +62,7 @@ if __name__ == "__main__":
                     num_sanity_val_steps=2,
                     callbacks = [MatchingMetrics(run_scot=args.run_scot, eval_interval = args.eval_interval), checkpoint_callback], 
                     logger = wandb_logger,
+                    deterministic = True
                     )
     
     trainer.fit(model = model, datamodule = data)

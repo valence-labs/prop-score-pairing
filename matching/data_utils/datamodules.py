@@ -94,7 +94,7 @@ class BallsDataModule(LightningDataModule):
         self.batch_size = batch_size
         self.dataset = BallsDataset
     def prepare_data(self):
-        self.data_dir = "/mnt/ps/home/CORP/johnny.xi/sandbox/matching/data/datasets/balls_scm_non_linear/intervention/"
+        self.data_dir = "/scratch/st-benbr-1/xijohnny/matching/data/datasets/balls_scm_non_linear/intervention/"
     def setup(self, stage: str):
         self.x1_tr = np.load(self.data_dir +  'train_' + 'x1' + '.npy')
         self.x2_tr = np.load(self.data_dir +  'train_' + 'x2' + '.npy')
@@ -124,16 +124,18 @@ class NoisyBallsDataModule(BallsDataModule):
         super().__init__(**kwargs)
         self.dataset = NoisyBallsDataset
     def prepare_data(self):
-        self.data_dir = "/mnt/ps/home/CORP/johnny.xi/sandbox/matching/data/datasets/noisyballs_scm_non_linear/intervention/"
+        self.data_dir = "/scratch/st-benbr-1/xijohnny/matching/data/datasets/noisyballs_scm_non_linear/intervention/"
 
 class GEXADTDataModule(LightningDataModule):
     def __init__(self,
         batch_size: int = 256,
-        d1_sub: bool = False):
+        d1_sub: bool = False,
+        num_workers: int = 4):
 
         super().__init__()
         self.batch_size = batch_size
         self.d1_sub = d1_sub ## Give option to subset the data to donor 1 
+        self.num_workers = num_workers
 
     def _train_val_split_df(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         if "split" not in df.columns:
@@ -155,8 +157,8 @@ class GEXADTDataModule(LightningDataModule):
         return train_df, val_df, test_df
 
     def load_data(self) -> Tuple[Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame], Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]]:
-        data_adt = pd.read_parquet("/mnt/ps/home/CORP/johnny.xi/sandbox/matching/data/datasets/neurips_2021_bm/adt.parquet") 
-        data_gex = pd.read_parquet("/mnt/ps/home/CORP/johnny.xi/sandbox/matching/data/datasets/neurips_2021_bm/gex_pca_200.parquet") 
+        data_adt = pd.read_parquet("/scratch/st-benbr-1/xijohnny/matching/data/datasets/neurips_2021_bm/adt.parquet") 
+        data_gex = pd.read_parquet("/scratch/st-benbr-1/xijohnny/matching/data/datasets/neurips_2021_bm/gex_pca_200.parquet") 
 
         if self.d1_sub:
             d1 = ["s1d1", "s1d2", "s1d3"]
@@ -199,11 +201,13 @@ class GEXADTDataModule(LightningDataModule):
 
     def train_dataloader(self) -> DataLoader:
         print("train dataloader")
-        return DataLoader(self.train_dataset, batch_size = self.batch_size, shuffle = True, num_workers=8)
+        return DataLoader(self.train_dataset, batch_size = self.batch_size, shuffle = True, num_workers = self.num_workers)
     def val_dataloader(self) -> DataLoader:
-        return DataLoader(self.val_dataset, batch_size = self.batch_size, num_workers=8)
+        return DataLoader(self.val_dataset, batch_size = len(self.val_dataset), num_workers = self.num_workers)  ## batch size is the entire dataset, small enough for this dataset 
     def test_dataloader(self) -> DataLoader:
-        return DataLoader(self.test_dataset, batch_size = self.batch_size, num_workers=8)
+        return DataLoader(self.test_dataset, batch_size = len(self.test_dataset), num_workers = self.num_workers)
+    
+
 class GEXADTDataset(Dataset):
     def __init__(self, 
                  data_adt: torch.Tensor, 
@@ -245,4 +249,51 @@ class GEXADTDataset_Double(GEXADTDataset):
         return adt_row, adt_row_2, gex_row_2, lab ## x1, x1(2), x2, y
      
 
+class CoupledDataset(Dataset):
+    def __init__(self, x1, x2, coupling, unbiased = False):
+        """
+        Args:
+            x1 (Tensor): Data tensor for x1.
+            x2 (Tensor): Data tensor for x2 of a specific class.
+            coupling (Tensor): Coupling matrix for this class.
+        """
+        self.x1 = x1
+        self.x2 = x2
+        self.coupling = coupling  ## NOTE: ensure this is the transposed coupling matrix.
+        self.unbiased = unbiased
 
+    def __len__(self):
+        return len(self.x2)
+
+    def __getitem__(self, idx):
+        sampled_idx = torch.multinomial(self.coupling[idx], num_samples=1).item()
+        sampled_x1 = self.x1[sampled_idx]
+        if self.unbiased:
+            sampled_x1_double = self.x1[torch.multinomial(self.coupling[idx], num_samples=1).item()]
+            return sampled_x1, sampled_x1_double, self.x2[idx], 0 ## modules expect x1, x1(2), x2, y
+        return sampled_x1, self.x2[idx], 0 ## modules expect x1, x2, y
+
+class WrapperDataset(Dataset):
+    def __init__(self, datasets):
+        """
+        Args:
+            datasets (list of CoupledDataset): List of CoupledDataset instances, one for each class.
+        """
+        self.datasets = datasets
+        self.lengths = [len(d) for d in datasets]
+        self.total_length = sum(self.lengths)
+
+    def __len__(self):
+        return self.total_length
+
+    def __getitem__(self, idx):
+        # Find which dataset the index falls into
+        dataset_idx, sample_idx = self._map_index(idx)
+        return self.datasets[dataset_idx][sample_idx]
+
+    def _map_index(self, idx):
+        # Maps a global index to the corresponding dataset index and sample index
+        for i, length in enumerate(self.lengths):
+            if idx < length:
+                return i, idx
+            idx -= length

@@ -43,7 +43,7 @@ if __name__ == "__main__":
         for (i, batch) in tqdm(enumerate(test_data)):
             if i == 0:
                 x1, x2 = batch[0], batch[1]
-                match1, match2 = model(batch[0].to(device), batch[1].to(device))
+                match1, match2 = model(batch[0].to(device), batch[1].to(device)) ## batch_size x n_classes 
                 y = batch[2]
                 if isinstance(data, BallsDataModule): 
                     z = batch[3]

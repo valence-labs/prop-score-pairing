@@ -1,3 +1,7 @@
+# Propensity Score Alignment of Unpaired Multimodal Data
+
+This repo contains code to reproduce the results of our [recent paper](https://arxiv.org/abs/2404.01595) on aligning unpaired multimodal data by leveraging the propensity score. If you would like to use this repo on your own data, you will simply need to train a classifier on each modality (see [./main.py](https://github.com/valence-labs/prop-score-pairing/blob/main/main.py) for example code), and then you can run the [inference script](https://github.com/valence-labs/prop-score-pairing/blob/main/inference.py) on the trained classifiers. Cross-modality prediction can be achieved with the [probing](https://github.com/valence-labs/prop-score-pairing/blob/main/probing.py) code.
+
 ### Data Preparation
 
 The two relevant datasets can be loaded by running 
